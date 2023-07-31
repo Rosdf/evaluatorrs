@@ -1,4 +1,4 @@
-use crate::formulas::Formula;
+use crate::formulas::FormulaLike;
 
 struct Sin;
 

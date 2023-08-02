@@ -1,17 +1,13 @@
 use crate::formulas::{Formula, FormulaLike, ParserError};
 
-pub(crate) struct ArgumentBounds {
+pub type FormulaParser = dyn Fn(&[&str]) -> Result<Box<dyn FormulaLike>, ParserError>;
+
+pub struct ArgumentBounds {
     min: usize,
     max: usize,
 }
 
-pub(crate) trait FormulaStore {
+pub trait FormulaStore {
     fn register<T: Formula>();
-    fn get_constructor(
-        &self,
-        formula_name: &str,
-    ) -> Option<(
-        &dyn Fn(&[&str]) -> Result<Box<dyn FormulaLike>, ParserError>,
-        ArgumentBounds,
-    )>;
+    fn get_parser(&self, formula_name: &str) -> Option<(&FormulaParser, ArgumentBounds)>;
 }

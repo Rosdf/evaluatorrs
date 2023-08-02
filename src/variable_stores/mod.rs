@@ -1,24 +1,15 @@
-use std::collections::HashMap;
+mod hashmap_store;
+pub use crate::variable_stores::hashmap_store::HashMapStore;
 
-pub(crate) trait GetVariable {
+pub trait GetVariable {
     fn get(&self, name: &str) -> Option<f64>;
     fn as_dyn(&self) -> &dyn GetVariable;
 }
 
-pub struct HashMapStore(HashMap<String, f64>);
-
-impl HashMapStore {
-    pub fn new() -> Self {
-        Self { 0: HashMap::new() }
-    }
+pub trait SetVariable: GetVariable {
+    fn set(&mut self, name: String, value: f64);
 }
 
-impl GetVariable for HashMapStore {
-    fn get(&self, name: &str) -> Option<f64> {
-        self.0.get(name).copied()
-    }
-
-    fn as_dyn(&self) -> &dyn GetVariable {
-        self
-    }
+pub trait SetInnerVariable: GetVariable {
+    fn set(&self, name: String, value: f64);
 }

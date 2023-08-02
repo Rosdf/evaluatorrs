@@ -1,14 +1,11 @@
-use crate::formulas::{
-    Evaluate, ExpressionParsingError, FormulaLike, IsConst, ParenthesisError, ParserError,
-};
-use crate::utils::{Queue, Stack};
+use crate::formulas::{Evaluate, ExpressionParsingError, FormulaLike, IsConst, ParenthesisError};
 use crate::variable_stores::{GetVariable, HashMapStore};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::str::FromStr;
 
 #[derive(Debug)]
-pub(crate) struct BaseFormula {
+pub struct BaseFormula {
     tree: FormulaArgument,
 }
 
@@ -50,7 +47,7 @@ impl IsConst for FormulaArgument {
 
 impl From<NumberLike> for FormulaArgument {
     fn from(value: NumberLike) -> Self {
-        FormulaArgument::NumberLike(value.into())
+        FormulaArgument::NumberLike(value)
     }
 }
 
@@ -62,7 +59,7 @@ impl From<f64> for FormulaArgument {
 
 impl From<Box<dyn FormulaLike>> for FormulaArgument {
     fn from(value: Box<dyn FormulaLike>) -> Self {
-        Self::Formula(value.into())
+        Self::Formula(value)
     }
 }
 
@@ -72,8 +69,8 @@ impl TryFrom<BaseToken> for FormulaArgument {
     fn try_from(value: BaseToken) -> Result<Self, Self::Error> {
         match value {
             BaseToken::NumberLike(val) => Ok(val.into()),
-            BaseToken::Operator(val) => Err(()),
-            BaseToken::Bracket(val) => Err(()),
+            BaseToken::Operator(_) => Err(()),
+            BaseToken::Bracket(_) => Err(()),
             BaseToken::Formula(val) => Ok(val.into()),
         }
     }
@@ -114,7 +111,7 @@ impl IsConst for OperatorFormula {
 impl Evaluate for OperatorFormula {
     fn eval_dyn(&mut self, args: &dyn GetVariable) -> f64 {
         self.operator
-            .eval(self.first.eval(&*args), self.second.eval(&*args))
+            .eval(self.first.eval(args), self.second.eval(args))
     }
 
     fn eval<T: GetVariable + ?Sized>(&mut self, args: &T) -> f64
@@ -122,7 +119,7 @@ impl Evaluate for OperatorFormula {
         Self: Sized,
     {
         self.operator
-            .eval(self.first.eval(&*args), self.second.eval(&*args))
+            .eval(self.first.eval(args), self.second.eval(args))
     }
 }
 
@@ -164,14 +161,14 @@ impl From<String> for NumberLike {
 impl Evaluate for NumberLike {
     fn eval_dyn(&mut self, args: &dyn GetVariable) -> f64 {
         match self {
-            NumberLike::Number(num) => num.clone(),
+            NumberLike::Number(num) => *num,
             NumberLike::Variable(var) => args.get(var).unwrap(),
         }
     }
 
     fn eval<T: GetVariable + ?Sized>(&mut self, args: &T) -> f64 {
         match self {
-            NumberLike::Number(num) => num.clone(),
+            NumberLike::Number(num) => *num,
             NumberLike::Variable(var) => args.get(var).unwrap(),
         }
     }
@@ -200,7 +197,7 @@ impl Bracket {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum Operator {
+pub enum Operator {
     Plus,
     Minus,
     Multiply,
@@ -245,7 +242,7 @@ impl Operator {
         }
     }
 
-    fn to_formula(self, first: FormulaArgument, second: FormulaArgument) -> OperatorFormula {
+    fn into_formula(self, first: FormulaArgument, second: FormulaArgument) -> OperatorFormula {
         OperatorFormula {
             first,
             second,
@@ -311,18 +308,18 @@ impl From<OperatorStackToken> for BaseToken {
 }
 
 impl BaseFormula {
-    fn parse_parenthesis(expression: &mut String) -> Option<Bracket> {
+    fn parse_parenthesis(expression: &mut &str) -> Option<Bracket> {
         if expression.is_empty() {
             return None;
         }
         let res = Bracket::parse(expression.chars().next().unwrap());
         if res.is_some() {
-            expression.remove(0);
+            *expression = &expression[1..];
         }
         res
     }
 
-    fn parse_number(expression: &mut String) -> Option<f64> {
+    fn parse_number(expression: &mut &str) -> Option<f64> {
         if expression.is_empty() {
             return None;
         }
@@ -362,24 +359,24 @@ impl BaseFormula {
         }
         if encountered_digit {
             let ret = f64::from_str(&expression[..parsed]).unwrap();
-            expression.drain(..parsed);
+            *expression = &expression[parsed..];
             return Some(ret);
         }
         None
     }
 
-    fn parse_operator(expression: &mut String) -> Option<Operator> {
+    fn parse_operator(expression: &mut &str) -> Option<Operator> {
         if expression.is_empty() {
             return None;
         }
         let res = Operator::parse(expression.chars().next().unwrap());
         if res.is_some() {
-            expression.remove(0);
+            *expression = &expression[1..];
         }
         res
     }
 
-    fn remove_spaces(expression: &mut String) {
+    fn remove_spaces(expression: &mut &str) {
         let mut spaces: usize = 0;
         for elem in expression.chars() {
             if elem == ' ' {
@@ -388,12 +385,14 @@ impl BaseFormula {
                 break;
             }
         }
-        expression.drain(..spaces);
+        *expression = &expression[spaces..];
     }
 
-    fn lex_expression(
-        mut expression: String,
-    ) -> Result<VecDeque<BaseToken>, ExpressionParsingError> {
+    fn parse_variable(expression: &mut &str) -> String {
+        todo!()
+    }
+
+    fn lex_expression(mut expression: &str) -> Result<VecDeque<BaseToken>, ExpressionParsingError> {
         let mut res = VecDeque::new();
         let mut prev_len = expression.len() + 1;
         while expression.len() < prev_len {
@@ -416,14 +415,12 @@ impl BaseFormula {
         if expression.is_empty() {
             return Ok(res);
         }
-        Err(ExpressionParsingError {
-            left_expression: expression,
-        })
+        Err(ExpressionParsingError)
     }
 
     fn process_bracket(
         bra: Bracket,
-        rpn: &mut impl Queue<BaseToken>,
+        rpn: &mut VecDeque<BaseToken>,
         operator_stack: &mut Vec<OperatorStackToken>,
     ) -> Result<(), ParenthesisError> {
         match bra {
@@ -433,7 +430,7 @@ impl BaseFormula {
                 while let Some(oper) = operator_stack.pop() {
                     match oper {
                         OperatorStackToken::Operator(operator) => {
-                            rpn.push(BaseToken::Operator(operator));
+                            rpn.push_back(BaseToken::Operator(operator));
                         }
                         OperatorStackToken::OpenBracket(_) => {
                             found_open = true;
@@ -451,7 +448,7 @@ impl BaseFormula {
 
     fn process_operator(
         op: Operator,
-        rpn: &mut impl Queue<BaseToken>,
+        rpn: &mut VecDeque<BaseToken>,
         operator_stack: &mut Vec<OperatorStackToken>,
     ) {
         if op.side() == Side::Right {
@@ -462,7 +459,7 @@ impl BaseFormula {
             match oper {
                 OperatorStackToken::Operator(oper) => {
                     if op.priority() >= oper.priority() {
-                        rpn.push(operator_stack.pop().unwrap().into())
+                        rpn.push_back(operator_stack.pop().unwrap().into())
                     } else {
                         break;
                     }
@@ -514,8 +511,8 @@ impl BaseFormula {
                 BaseToken::Operator(operator) => {
                     let second = rpn.pop_back().unwrap();
                     let first = rpn.pop_back().unwrap();
-                    let mut operator_formula =
-                        operator.to_formula(first.try_into().unwrap(), second.try_into().unwrap());
+                    let mut operator_formula = operator
+                        .into_formula(first.try_into().unwrap(), second.try_into().unwrap());
                     rpn.push_back(if operator_formula.is_const() {
                         operator_formula.eval(&empty_store).into()
                     } else {
@@ -532,9 +529,9 @@ impl BaseFormula {
         None
     }
 
-    pub fn new(mut expression: String) -> Self {
-        let mut parsed = Self::lex_expression(expression).unwrap();
-        let mut rpn = Self::build_rpn(parsed).unwrap();
+    pub fn new(expression: &str) -> Self {
+        let parsed = Self::lex_expression(expression).unwrap();
+        let rpn = Self::build_rpn(parsed).unwrap();
         Self {
             tree: Self::compress_rpn(rpn).unwrap(),
         }
@@ -547,48 +544,42 @@ mod lexer_test {
 
     #[test]
     fn remove_all_spaces() {
-        let mut expression = "     ".to_string();
+        let mut expression = "     ";
         BaseFormula::remove_spaces(&mut expression);
         assert_eq!(expression, "", "{}", expression);
     }
 
     #[test]
     fn remove_spaces_with_text() {
-        let mut expression = "     asd".to_string();
+        let mut expression = "     asd";
         BaseFormula::remove_spaces(&mut expression);
         assert_eq!(expression, "asd", "{}", expression);
     }
 
     #[test]
     fn remove_spaces() {
-        let mut expression = "     asd   ".to_string();
+        let mut expression = "     asd   ";
         BaseFormula::remove_spaces(&mut expression);
         assert_eq!(expression, "asd   ", "{}", expression);
     }
 
     #[test]
     fn number_parser() {
-        assert_eq!(BaseFormula::parse_number(&mut "1".to_string()), Some(1.0));
-        assert_eq!(BaseFormula::parse_number(&mut "-1".to_string()), Some(-1.0));
-        assert_eq!(BaseFormula::parse_number(&mut "1.0".to_string()), Some(1.0));
-        assert_eq!(BaseFormula::parse_number(&mut "1.1".to_string()), Some(1.1));
-        assert_eq!(BaseFormula::parse_number(&mut "0.1".to_string()), Some(0.1));
-        assert_eq!(BaseFormula::parse_number(&mut "0.0".to_string()), Some(0.0));
-        assert_eq!(BaseFormula::parse_number(&mut "+".to_string()), None);
-        assert_eq!(
-            BaseFormula::parse_number(&mut "1.0001".to_string()),
-            Some(1.0001)
-        );
-        assert_eq!(
-            BaseFormula::parse_number(&mut "-1.03456".to_string()),
-            Some(-1.03456)
-        );
+        assert_eq!(BaseFormula::parse_number(&mut "1"), Some(1.0));
+        assert_eq!(BaseFormula::parse_number(&mut "-1"), Some(-1.0));
+        assert_eq!(BaseFormula::parse_number(&mut "1.0"), Some(1.0));
+        assert_eq!(BaseFormula::parse_number(&mut "1.1"), Some(1.1));
+        assert_eq!(BaseFormula::parse_number(&mut "0.1"), Some(0.1));
+        assert_eq!(BaseFormula::parse_number(&mut "0.0"), Some(0.0));
+        assert_eq!(BaseFormula::parse_number(&mut "+"), None);
+        assert_eq!(BaseFormula::parse_number(&mut "1.0001"), Some(1.0001));
+        assert_eq!(BaseFormula::parse_number(&mut "-1.03456"), Some(-1.03456));
     }
 
     #[test]
     fn basic_test_lex() {
-        let expression = "1+2".to_string();
-        let mut result = BaseFormula::lex_expression(expression);
+        let expression = "1+2";
+        let result = BaseFormula::lex_expression(expression);
 
         assert!(result.is_ok());
         let mut result = result.unwrap();
@@ -609,8 +600,8 @@ mod lexer_test {
 
     #[test]
     fn space_test_lex() {
-        let expression = "  1 +   2 ".to_string();
-        let mut result = BaseFormula::lex_expression(expression);
+        let expression = "  1 +   2 ";
+        let result = BaseFormula::lex_expression(expression);
 
         assert!(result.is_ok());
         let mut result = result.unwrap();
@@ -643,7 +634,7 @@ mod rpn_test {
         initial.push_back(1.0.into());
         initial.push_back(Operator::Plus.into());
         initial.push_back(2.0.into());
-        let mut result = BaseFormula::build_rpn(initial);
+        let result = BaseFormula::build_rpn(initial);
         assert!(result.is_ok());
         let mut result = result.unwrap();
         assert_eq!(result.len(), 3, "{:?}", result);
@@ -671,7 +662,7 @@ mod rpn_test {
         initial.push_back(Bracket::CloseBracket(CloseBracket).into());
         initial.push_back(Operator::Multiply.into());
         initial.push_back(5.0.into());
-        let mut result = BaseFormula::build_rpn(initial);
+        let result = BaseFormula::build_rpn(initial);
         assert!(result.is_ok(), "{:?}", result);
         let mut result = result.unwrap();
         assert_eq!(result.len(), 5, "{:?}", result);
@@ -707,7 +698,7 @@ mod rpn_test {
         initial.push_back(5.0.into());
         initial.push_back(Operator::Multiply.into());
         initial.push_back(6.0.into());
-        let mut result = BaseFormula::build_rpn(initial);
+        let result = BaseFormula::build_rpn(initial);
         assert!(result.is_ok(), "{:?}", result);
         let mut result = result.unwrap();
         assert_eq!(result.len(), 7, "{:?}", result);
@@ -749,7 +740,7 @@ mod rpn_test {
         initial.push_back(6.0.into());
         initial.push_back(Operator::Power.into());
         initial.push_back(7.0.into());
-        let mut result = BaseFormula::build_rpn(initial);
+        let result = BaseFormula::build_rpn(initial);
         assert!(result.is_ok(), "{:?}", result);
         let mut result = result.unwrap();
         assert_eq!(result.len(), 5, "{:?}", result);
@@ -784,7 +775,7 @@ mod rpn_test {
         initial.push_back(Operator::Plus.into());
         initial.push_back(2.0.into());
         initial.push_back(Bracket::CloseBracket(CloseBracket).into());
-        let mut result = BaseFormula::build_rpn(initial);
+        let result = BaseFormula::build_rpn(initial);
         assert!(result.is_err(), "{:?}", result);
     }
 
@@ -798,7 +789,7 @@ mod rpn_test {
         initial.push_back(2.0.into());
         initial.push_back(Bracket::CloseBracket(CloseBracket).into());
         initial.push_back(Bracket::CloseBracket(CloseBracket).into());
-        let mut result = BaseFormula::build_rpn(initial);
+        let result = BaseFormula::build_rpn(initial);
         assert!(result.is_ok());
         let mut result = result.unwrap();
         assert_eq!(result.len(), 3, "{:?}", result);

@@ -1,6 +1,12 @@
 [package]
-name = "eval_tmp"
-version = "0.1.0"
+name = "evaluatorrs"
+version = "0.0.1"
+description = "Tools for runtime evaluation of mathematical expressions"
+repository = "https://github.com/Rosdf/evaluatorrs"
+readme = "README.md"
+license = "MIT"
+keywords = ["math", "expression", "evaluation"]
+categories = ["parsing-tools"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,11 +16,7 @@ criterion = { version = "0.5.1", features = ["html_reports"] }
 evalexpr = "11.0.1"
 
 [[bench]]
-name = "my_benchmark"
-harness = false
-
-[[bench]]
-name = "evalexpr_benchmark"
+name = "simple_bench"
 harness = false
 
 [dependencies]

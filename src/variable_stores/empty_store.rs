@@ -1,7 +1,9 @@
-use crate::formulas::root_formula::RootFormula;
-use crate::variable_stores::{GetVariable, Variable};
+use crate::formulas::RootFormula;
+use crate::variable_stores::{GetVariable, SetVariable, Variable};
 use std::sync::Arc;
 
+/// Variable store that can not contain any functions.
+#[derive(Debug, Copy, Clone)]
 pub struct EmptyVariableStore;
 
 impl GetVariable for EmptyVariableStore {
@@ -12,8 +14,8 @@ impl GetVariable for EmptyVariableStore {
     fn as_dyn(&self) -> &dyn GetVariable {
         self
     }
+}
 
-    fn as_dyn_mut(&mut self) -> &mut dyn GetVariable {
-        self
-    }
+impl SetVariable for EmptyVariableStore {
+    fn set(&mut self, _name: impl Into<Variable>, _value: impl Into<RootFormula>) {}
 }

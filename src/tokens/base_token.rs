@@ -62,3 +62,30 @@ impl<T: FunctionLike + 'static> From<T> for BaseToken {
         Self::Formula(Box::new(value))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::tokens::Bracket;
+
+    #[test]
+    fn parse_open_bracket() {
+        let res = Bracket::parse('(');
+        assert!(res.is_some());
+        let res = res.unwrap();
+        assert!(matches!(res, Bracket::OpenBracket(_)));
+    }
+
+    #[test]
+    fn parse_close_bracket() {
+        let res = Bracket::parse(')');
+        assert!(res.is_some());
+        let res = res.unwrap();
+        assert!(matches!(res, Bracket::CloseBracket(_)));
+    }
+
+    #[test]
+    fn fail_parse() {
+        let res = Bracket::parse('3');
+        assert!(res.is_none());
+    }
+}

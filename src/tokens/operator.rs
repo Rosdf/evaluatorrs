@@ -1,13 +1,25 @@
 use crate::formulas::operator::OperatorFormula;
-use crate::formulas::root_formula::RootFormula;
+use crate::formulas::RootFormula;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum Operator {
     Plus,
     Minus,
     Multiply,
     Divide,
     Exponent,
+}
+
+impl From<Operator> for &'static str {
+    fn from(value: Operator) -> Self {
+        match value {
+            Operator::Plus => "+",
+            Operator::Minus => "-",
+            Operator::Multiply => "*",
+            Operator::Divide => "/",
+            Operator::Exponent => "^",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

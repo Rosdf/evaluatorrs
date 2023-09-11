@@ -1,57 +1,76 @@
-use crate::formula_stores::GetParser;
-use crate::formulas::{
-    Evaluate, EvaluationError, FunctionLike, IsConst, MathError, OpernandNumError,
-    ParenthesisError, ParserError, UnknownTokenError,
-};
-use crate::tokens::{BaseToken, Bracket, NumberLike, OpenBracket, Operator, Side};
+use crate::formulas::root_formula::formula_argument::FormulaArgument;
+use crate::formulas::root_formula::lexer::lex_expression;
+use crate::formulas::{Evaluate, EvaluationError, FunctionLike, IsConst, MathError, ParserError};
+use crate::function_stores::GetFunction;
+use crate::tokens::{BaseToken, Operator};
 use crate::variable_stores::{EmptyVariableStore, GetVariable, Variable};
-use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::str::FromStr;
+use std::ops::Add;
+
+use crate::formulas::operator::OperatorFormula;
+use crate::formulas::root_formula::parser::parse_tokens;
 use std::sync::Arc;
 
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum FormulaArgument {
-    Number(f64),
-    Variable(Variable),
-    OwnedFunction(Box<dyn FunctionLike>),
-    SharedFunction(Arc<dyn FunctionLike>),
-}
+mod formula_argument {
+    use super::{Arc, BaseToken, Debug, FunctionLike, Variable};
+    use crate::tokens::NumberLike;
 
-impl From<NumberLike> for FormulaArgument {
-    fn from(value: NumberLike) -> Self {
-        match value {
-            NumberLike::Number(num) => Self::Number(num),
-            NumberLike::Variable(var) => Self::Variable(var),
+    #[derive(Debug)]
+    #[non_exhaustive]
+    pub enum FormulaArgument {
+        Number(f64),
+        Variable(Variable),
+        OwnedFunction(Box<dyn FunctionLike>),
+        SharedFunction(Arc<dyn FunctionLike>),
+    }
+
+    impl From<NumberLike> for FormulaArgument {
+        fn from(value: NumberLike) -> Self {
+            match value {
+                NumberLike::Number(num) => Self::Number(num),
+                NumberLike::Variable(var) => Self::Variable(var),
+            }
+        }
+    }
+
+    impl From<Variable> for FormulaArgument {
+        fn from(value: Variable) -> Self {
+            Self::Variable(value)
+        }
+    }
+
+    impl From<f64> for FormulaArgument {
+        fn from(value: f64) -> Self {
+            Self::Number(value)
+        }
+    }
+
+    impl From<Arc<dyn FunctionLike>> for FormulaArgument {
+        fn from(value: Arc<dyn FunctionLike>) -> Self {
+            Self::SharedFunction(value)
+        }
+    }
+
+    impl From<Box<dyn FunctionLike>> for FormulaArgument {
+        fn from(value: Box<dyn FunctionLike>) -> Self {
+            Self::OwnedFunction(value)
+        }
+    }
+
+    impl TryFrom<BaseToken> for FormulaArgument {
+        type Error = ();
+
+        fn try_from(value: BaseToken) -> Result<Self, Self::Error> {
+            match value {
+                BaseToken::NumberLike(val) => Ok(val.into()),
+                BaseToken::Operator(_) | BaseToken::Bracket(_) => Err(()),
+                BaseToken::Formula(val) => Ok(Self::OwnedFunction(val)),
+            }
         }
     }
 }
 
-impl From<f64> for FormulaArgument {
-    fn from(value: f64) -> Self {
-        Self::Number(value)
-    }
-}
-
-impl From<Arc<dyn FunctionLike>> for FormulaArgument {
-    fn from(value: Arc<dyn FunctionLike>) -> Self {
-        Self::SharedFunction(value)
-    }
-}
-
-impl TryFrom<BaseToken> for FormulaArgument {
-    type Error = ();
-
-    fn try_from(value: BaseToken) -> Result<Self, Self::Error> {
-        match value {
-            BaseToken::NumberLike(val) => Ok(val.into()),
-            BaseToken::Operator(_) | BaseToken::Bracket(_) => Err(()),
-            BaseToken::Formula(val) => Ok(Self::OwnedFunction(val)),
-        }
-    }
-}
-
+/// Struct to store information about the formula.
 #[derive(Debug)]
 pub struct RootFormula {
     tree: FormulaArgument,
@@ -79,15 +98,39 @@ impl IsConst for RootFormula {
     }
 }
 
+impl Clone for RootFormula {
+    fn clone(&self) -> Self {
+        match &self.tree {
+            FormulaArgument::Number(num) => Self::new(*num),
+            FormulaArgument::Variable(var) => Self::new(var.clone()),
+            FormulaArgument::OwnedFunction(func) => Self {
+                tree: FormulaArgument::OwnedFunction(func.clone_into_box()),
+            },
+            FormulaArgument::SharedFunction(func) => Self {
+                tree: FormulaArgument::SharedFunction(Arc::clone(func)),
+            },
+        }
+    }
+}
+
 impl FunctionLike for RootFormula {
     fn collapse_inner(&mut self) -> Result<(), MathError> {
         if self.is_const() {
             self.tree = FormulaArgument::Number(match self.eval(&EmptyVariableStore) {
                 Ok(val) => val,
                 Err(EvaluationError::MathError(e)) => return Err(e),
-                Err(EvaluationError::NoVariableError) => unreachable!(),
+                Err(EvaluationError::NoVariableError(_)) => unreachable!(),
             });
             return Ok(());
+        }
+        if let FormulaArgument::SharedFunction(function) = &self.tree {
+            if Arc::strong_count(function) == 1 {
+                self.tree = FormulaArgument::OwnedFunction(
+                    // SAFETY: since strong reference count is 1, we are the only holder of Arc
+                    // and can safely convert it to Box
+                    unsafe { Box::from_raw(Arc::as_ptr(function).cast_mut()) },
+                );
+            }
         }
         if let FormulaArgument::OwnedFunction(function) = &mut self.tree {
             function.collapse_inner()
@@ -96,32 +139,80 @@ impl FunctionLike for RootFormula {
         }
     }
 
-    fn set_variables_shared(&mut self, args: &dyn GetVariable) {
-        if let FormulaArgument::Variable(variable) = &self.tree {
-            if let Some(function) = args.get(variable) {
-                self.tree =
-                    FormulaArgument::SharedFunction(Arc::clone(function) as Arc<dyn FunctionLike>);
+    fn set_all_variables_shared(&mut self, args: &dyn GetVariable) {
+        match self.tree {
+            FormulaArgument::Variable(ref variable) => {
+                if let Some(function) = args.get(variable) {
+                    self.tree = FormulaArgument::SharedFunction(
+                        Arc::clone(function) as Arc<dyn FunctionLike>
+                    );
+                }
             }
+            FormulaArgument::OwnedFunction(ref mut function) => {
+                function.set_all_variables_shared(args);
+            }
+            _ => {}
         }
+    }
+
+    fn set_all_variables_owned(&mut self, args: &dyn GetVariable) {
+        match self.tree {
+            FormulaArgument::Variable(ref variable) => {
+                if let Some(function) = args.get(variable) {
+                    self.tree = FormulaArgument::OwnedFunction(function.clone_into_box());
+                }
+            }
+            FormulaArgument::OwnedFunction(ref mut function) => {
+                function.set_all_variables_shared(args);
+            }
+            _ => {}
+        }
+    }
+
+    fn set_variable_shared(&mut self, name: &Variable, function: &Arc<RootFormula>) {
+        match self.tree {
+            FormulaArgument::Variable(ref variable) => {
+                if variable == name {
+                    self.tree = FormulaArgument::SharedFunction(
+                        Arc::clone(function) as Arc<dyn FunctionLike>
+                    );
+                }
+            }
+            FormulaArgument::OwnedFunction(ref mut local_function) => {
+                local_function.set_variable_shared(name, function);
+            }
+            _ => {}
+        }
+    }
+
+    fn set_variable_owned(&mut self, name: &Variable, function: &RootFormula) {
+        match self.tree {
+            FormulaArgument::Variable(ref variable) => {
+                if variable == name {
+                    self.tree = FormulaArgument::OwnedFunction(function.clone_into_box());
+                }
+            }
+            FormulaArgument::OwnedFunction(ref mut local_function) => {
+                local_function.set_variable_owned(name, function);
+            }
+            _ => {}
+        }
+    }
+
+    fn clone_into_box(&self) -> Box<dyn FunctionLike> {
+        Box::new(self.clone())
     }
 }
 
-enum OperatorStackToken {
-    Operator(Operator),
-    OpenBracket(OpenBracket),
-}
+mod lexer {
+    use crate::formulas::{ArgumentsError, FunctionLike, ParserError, UnknownTokenError};
+    use crate::function_stores::GetFunction;
+    use crate::tokens::{BaseToken, Bracket, Operator};
+    use crate::variable_stores::Variable;
+    use std::collections::VecDeque;
+    use std::str::FromStr;
 
-impl From<OperatorStackToken> for BaseToken {
-    fn from(value: OperatorStackToken) -> Self {
-        match value {
-            OperatorStackToken::Operator(operator) => Self::Operator(operator),
-            OperatorStackToken::OpenBracket(bra) => Self::Bracket(Bracket::OpenBracket(bra)),
-        }
-    }
-}
-
-impl RootFormula {
-    fn parse_parenthesis(expression: &mut &str) -> Option<Bracket> {
+    fn lex_parenthesis(expression: &mut &str) -> Option<Bracket> {
         if expression.is_empty() {
             return None;
         }
@@ -132,7 +223,7 @@ impl RootFormula {
         res
     }
 
-    fn parse_number(expression: &mut &str) -> Option<f64> {
+    fn lex_number(expression: &mut &str) -> Option<f64> {
         if expression.is_empty() {
             return None;
         }
@@ -179,7 +270,7 @@ impl RootFormula {
         None
     }
 
-    fn parse_operator(expression: &mut &str) -> Option<Operator> {
+    fn lex_operator(expression: &mut &str) -> Option<Operator> {
         if expression.is_empty() {
             return None;
         }
@@ -202,7 +293,7 @@ impl RootFormula {
         *expression = &expression[spaces..];
     }
 
-    fn parse_variable(expression: &mut &str) -> Option<Variable> {
+    fn lex_variable(expression: &mut &str) -> Option<Variable> {
         let mut parsed: usize = 0;
         let mut started = false;
         for elem in expression.chars() {
@@ -225,38 +316,257 @@ impl RootFormula {
         Some(result)
     }
 
-    fn lex_expression<T: GetParser>(
+    fn collect_arguments<'a>(expression: &mut &'a str) -> Box<[&'a str]> {
+        let mut arguments = Vec::new();
+        let mut brackets: usize = 1;
+        let mut prev_comma: usize = 0;
+        let mut early_exit = false;
+        let mut last_index = 0;
+        for (index, elem) in expression.chars().enumerate() {
+            match elem {
+                '(' => brackets += 1,
+                ')' => {
+                    brackets -= 1;
+                    if brackets == 0 {
+                        last_index = index;
+                        early_exit = true;
+                        arguments.push(&expression[prev_comma..index]);
+                        break;
+                    }
+                }
+                ',' if brackets == 1 => {
+                    arguments.push(&expression[prev_comma..index]);
+                    prev_comma = index + 1;
+                }
+                _ => {}
+            }
+        }
+        if !early_exit {
+            last_index = expression.len() - 1;
+        }
+
+        *expression = &expression[last_index + 1..];
+        arguments.into_boxed_slice()
+    }
+
+    fn lex_function<T: for<'a> GetFunction<'a>>(
+        expression: &mut &str,
+        functions: &T,
+    ) -> Option<Result<Box<dyn FunctionLike>, ParserError>> {
+        for function_name in functions.iter() {
+            if let Some(without_name) = expression.strip_prefix(function_name) {
+                if let Some(mut without_name) = without_name.strip_prefix('(') {
+                    let arguments = collect_arguments(&mut without_name);
+                    let (parser, arg_num) = functions.function_parser(function_name).unwrap();
+                    if arguments.len() < arg_num.min || arguments.len() > arg_num.max {
+                        return Some(Err(ParserError::ArgumentsError(ArgumentsError(
+                            function_name.into(),
+                        ))));
+                    }
+                    *expression = without_name;
+                    return Some(parser(arguments.as_ref()));
+                }
+            }
+        }
+        None
+    }
+
+    pub(super) fn lex_expression<T: for<'a> GetFunction<'a>>(
         mut expression: &str,
         formulas: &T,
-    ) -> Result<VecDeque<BaseToken>, UnknownTokenError> {
+    ) -> Result<VecDeque<BaseToken>, ParserError> {
         let mut res = VecDeque::new();
         let mut prev_len = expression.len() + 1;
         while expression.len() < prev_len {
             prev_len = expression.len();
-            Self::remove_spaces(&mut expression);
-            if let Some(bra) = Self::parse_parenthesis(&mut expression) {
+            remove_spaces(&mut expression);
+            if let Some(bra) = lex_parenthesis(&mut expression) {
                 res.push_back(bra.into());
+                remove_spaces(&mut expression);
             }
 
-            Self::remove_spaces(&mut expression);
-            if let Some(num) = Self::parse_number(&mut expression) {
+            if let Some(num) = lex_number(&mut expression) {
                 res.push_back(num.into());
+                remove_spaces(&mut expression);
             }
 
-            Self::remove_spaces(&mut expression);
-            if let Some(operator) = Self::parse_operator(&mut expression) {
+            if let Some(operator) = lex_operator(&mut expression) {
                 res.push_back(operator.into());
+                remove_spaces(&mut expression);
             }
 
-            Self::remove_spaces(&mut expression);
-            if let Some(variable) = Self::parse_variable(&mut expression) {
+            if let Some(function) = lex_function(&mut expression, formulas) {
+                res.push_back(function?.into());
+                remove_spaces(&mut expression);
+            }
+
+            if let Some(variable) = lex_variable(&mut expression) {
                 res.push_back(variable.into());
+                remove_spaces(&mut expression);
             }
         }
         if expression.is_empty() {
             return Ok(res);
         }
-        Err(UnknownTokenError)
+        Err(ParserError::UnknownTokenError(UnknownTokenError(
+            expression.to_string(),
+        )))
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::formulas::root_formula::lexer::{
+            collect_arguments, lex_expression, lex_function, lex_number, lex_parenthesis,
+            remove_spaces,
+        };
+        use crate::formulas::sin::Sin;
+        use crate::function_stores::{EmptyFunctionStore, HashMapFunctionStore, RegisterParser};
+        use crate::tokens::{BaseToken, Bracket, NumberLike, Operator};
+
+        #[test]
+        fn test_lex_open_bracket() {
+            let mut expression = "(a";
+            let res = lex_parenthesis(&mut expression);
+            assert!(res.is_some());
+            let res = res.unwrap();
+            assert!(matches!(res, Bracket::OpenBracket(_)));
+            assert_eq!(expression, "a", "{expression}");
+        }
+
+        #[test]
+        fn test_lex_close_bracket() {
+            let mut expression = ")a";
+            let res = lex_parenthesis(&mut expression);
+            assert!(res.is_some());
+            let res = res.unwrap();
+            assert!(matches!(res, Bracket::CloseBracket(_)));
+            assert_eq!(expression, "a", "{expression}");
+        }
+
+        #[test]
+        fn test_remove_all_spaces() {
+            let mut expression = "     ";
+            remove_spaces(&mut expression);
+            assert_eq!(expression, "", "{expression}");
+        }
+
+        #[test]
+        fn test_remove_spaces_with_text() {
+            let mut expression = "     asd";
+            remove_spaces(&mut expression);
+            assert_eq!(expression, "asd", "{expression}");
+        }
+
+        #[test]
+        fn test_remove_spaces() {
+            let mut expression = "     asd   ";
+            remove_spaces(&mut expression);
+            assert_eq!(expression, "asd   ", "{expression}");
+        }
+
+        #[test]
+        fn number_parser() {
+            assert_eq!(lex_number(&mut "1"), Some(1.0));
+            assert_eq!(lex_number(&mut "-1"), Some(-1.0));
+            assert_eq!(lex_number(&mut "1.0"), Some(1.0));
+            assert_eq!(lex_number(&mut "1.1"), Some(1.1));
+            assert_eq!(lex_number(&mut "0.1"), Some(0.1));
+            assert_eq!(lex_number(&mut "0.0"), Some(0.0));
+            assert_eq!(lex_number(&mut "+"), None);
+            assert_eq!(lex_number(&mut "1.0001"), Some(1.0001));
+            assert_eq!(lex_number(&mut "-1.03456"), Some(-1.03456));
+        }
+
+        #[test]
+        fn basic_test_lex() {
+            let expression = "1+2";
+            let result = lex_expression(expression, &EmptyFunctionStore);
+
+            assert!(result.is_ok());
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 3);
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Plus)
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
+            ));
+        }
+
+        #[test]
+        fn space_test_lex() {
+            let expression = "  1 +   2 ";
+            let result = lex_expression(expression, &EmptyFunctionStore);
+
+            assert!(result.is_ok());
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 3);
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Plus)
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
+            ));
+        }
+
+        #[test]
+        fn test_function_lex() {
+            let mut store = HashMapFunctionStore::new();
+            store.register::<Sin>();
+            let mut expression = "sin(a)";
+            let res = lex_function(&mut expression, &store);
+            assert!(res.is_some(), "{res:?}");
+            let res = res.unwrap();
+            assert!(res.is_ok(), "{res:?}");
+            assert_eq!(expression, "", "{expression}");
+            // let res = res.unwrap();
+        }
+
+        #[test]
+        fn test_collect_arguments() {
+            let mut expression = "1, 2, (3, 4))";
+            let arguments = collect_arguments(&mut expression);
+            assert_eq!(arguments.len(), 3, "{arguments:?}");
+            assert_eq!(arguments.as_ref(), ["1", " 2", " (3, 4)"]);
+            assert_eq!(expression, "", "{expression}");
+        }
+    }
+}
+
+mod parser {
+    use crate::formulas::root_formula::formula_argument::FormulaArgument;
+    use crate::formulas::root_formula::RootFormula;
+    use crate::formulas::{
+        ArgumentsError, EvaluationError, FunctionLike, MathError, ParenthesisError, ParserError,
+    };
+    use crate::tokens::{BaseToken, Bracket, OpenBracket, Operator, Side};
+    use crate::variable_stores::EmptyVariableStore;
+    use std::collections::VecDeque;
+
+    enum OperatorStackToken {
+        Operator(Operator),
+        OpenBracket(OpenBracket),
+    }
+
+    impl From<OperatorStackToken> for BaseToken {
+        fn from(value: OperatorStackToken) -> Self {
+            match value {
+                OperatorStackToken::Operator(operator) => Self::Operator(operator),
+                OperatorStackToken::OpenBracket(bra) => Self::Bracket(Bracket::OpenBracket(bra)),
+            }
+        }
     }
 
     fn process_bracket(
@@ -321,9 +631,9 @@ impl RootFormula {
                     tokens.push_back(BaseToken::NumberLike(num_like));
                 }
                 BaseToken::Operator(operator) => {
-                    Self::process_operator(operator, &mut tokens, &mut stack);
+                    process_operator(operator, &mut tokens, &mut stack);
                 }
-                BaseToken::Bracket(bra) => Self::process_bracket(bra, &mut tokens, &mut stack)?,
+                BaseToken::Bracket(bra) => process_bracket(bra, &mut tokens, &mut stack)?,
                 BaseToken::Formula(formula) => tokens.push_back(BaseToken::Formula(formula)),
             }
         }
@@ -347,7 +657,12 @@ impl RootFormula {
         mut formula: T,
     ) -> Result<(), MathError> {
         if formula.is_const() {
-            rpn.push_back(formula.eval(&EmptyVariableStore)?.into())
+            rpn.push_back(match formula.eval(&EmptyVariableStore) {
+                Ok(val) => val.into(),
+                Err(EvaluationError::MathError(e)) => return Err(e),
+                Err(EvaluationError::NoVariableError(_)) => unreachable!(),
+            });
+            return Ok(());
         }
         formula.collapse_inner()?;
         rpn.push_back(formula.into());
@@ -362,18 +677,26 @@ impl RootFormula {
                 BaseToken::NumberLike(num_like) => rpn.push_back(BaseToken::NumberLike(num_like)),
                 BaseToken::Operator(operator) => {
                     let second = match rpn.pop_back() {
-                        None => return Err(ParserError::OpernandNumError(OpernandNumError)),
-                        Some(val) => Self::new::<FormulaArgument>(val.try_into().unwrap()),
+                        None => {
+                            return Err(ParserError::ArgumentsError(ArgumentsError(
+                                Into::<&str>::into(operator).into(),
+                            )))
+                        }
+                        Some(val) => RootFormula::new::<FormulaArgument>(val.try_into().unwrap()),
                     };
                     let first = match rpn.pop_back() {
-                        None => return Err(ParserError::OpernandNumError(OpernandNumError)),
-                        Some(val) => Self::new::<FormulaArgument>(val.try_into().unwrap()),
+                        None => {
+                            return Err(ParserError::ArgumentsError(ArgumentsError(
+                                Into::<&str>::into(operator).into(),
+                            )))
+                        }
+                        Some(val) => RootFormula::new::<FormulaArgument>(val.try_into().unwrap()),
                     };
                     let operator_formula = operator.into_formula(first, second);
-                    Self::push_formula(&mut rpn, operator_formula)?;
+                    push_formula(&mut rpn, operator_formula)?;
                 }
                 BaseToken::Formula(formula) => {
-                    Self::push_formula(&mut rpn, formula)?;
+                    push_formula(&mut rpn, formula)?;
                 }
                 BaseToken::Bracket(_) => unreachable!(),
             }
@@ -381,328 +704,262 @@ impl RootFormula {
         if rpn.len() == 1 {
             return Ok(rpn.pop_front().unwrap().try_into().unwrap());
         }
-        Err(ParserError::OpernandNumError(OpernandNumError))
+        Err(ParserError::ArgumentsError(ArgumentsError(
+            "no operator".to_string(),
+        )))
     }
 
+    pub(super) fn parse_tokens(
+        tokens: VecDeque<BaseToken>,
+    ) -> Result<FormulaArgument, ParserError> {
+        compress_rpn(build_rpn(tokens)?)
+    }
+
+    #[cfg(test)]
+    mod rpn_test {
+        use crate::formulas::root_formula::parser::build_rpn;
+        use crate::tokens::{BaseToken, Bracket, CloseBracket, NumberLike, OpenBracket, Operator};
+        use std::collections::VecDeque;
+
+        #[test]
+        fn easy_rpn_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(3);
+            initial.push_back(1.0.into());
+            initial.push_back(Operator::Plus.into());
+            initial.push_back(2.0.into());
+            let result = build_rpn(initial);
+            assert!(result.is_ok());
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 3, "{result:?}");
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Plus)
+            ));
+        }
+
+        #[test]
+        fn bracket_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
+            initial.push_back(Bracket::OpenBracket(OpenBracket).into());
+            initial.push_back(1.0.into());
+            initial.push_back(Operator::Plus.into());
+            initial.push_back(2.0.into());
+            initial.push_back(Bracket::CloseBracket(CloseBracket).into());
+            initial.push_back(Operator::Multiply.into());
+            initial.push_back(5.0.into());
+            let result = build_rpn(initial);
+            assert!(result.is_ok(), "{result:?}");
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 5, "{result:?}");
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Plus)
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 5.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Multiply)
+            ));
+        }
+
+        #[test]
+        fn priority_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
+            initial.push_back(1.0.into());
+            initial.push_back(Operator::Multiply.into());
+            initial.push_back(2.0.into());
+            initial.push_back(Operator::Plus.into());
+            initial.push_back(5.0.into());
+            initial.push_back(Operator::Multiply.into());
+            initial.push_back(6.0.into());
+            let result = build_rpn(initial);
+            assert!(result.is_ok(), "{result:?}");
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 7, "{result:?}");
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Multiply)
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 5.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 6.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Multiply)
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Plus)
+            ));
+        }
+
+        #[test]
+        fn power_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
+            initial.push_back(5.0.into());
+            initial.push_back(Operator::Exponent.into());
+            initial.push_back(6.0.into());
+            initial.push_back(Operator::Exponent.into());
+            initial.push_back(7.0.into());
+            let result = build_rpn(initial);
+            assert!(result.is_ok(), "{result:?}");
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 5, "{result:?}");
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 5.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 6.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 7.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Exponent)
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Exponent)
+            ));
+        }
+
+        #[test]
+        fn double_wrong_bracket_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(6);
+            initial.push_back(Bracket::OpenBracket(OpenBracket).into());
+            initial.push_back(Bracket::OpenBracket(OpenBracket).into());
+            initial.push_back(1.0.into());
+            initial.push_back(Operator::Plus.into());
+            initial.push_back(2.0.into());
+            initial.push_back(Bracket::CloseBracket(CloseBracket).into());
+            let result = build_rpn(initial);
+            assert!(result.is_err(), "{result:?}");
+        }
+
+        #[test]
+        fn double_bracket_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(6);
+            initial.push_back(Bracket::OpenBracket(OpenBracket).into());
+            initial.push_back(Bracket::OpenBracket(OpenBracket).into());
+            initial.push_back(1.0.into());
+            initial.push_back(Operator::Plus.into());
+            initial.push_back(2.0.into());
+            initial.push_back(Bracket::CloseBracket(CloseBracket).into());
+            initial.push_back(Bracket::CloseBracket(CloseBracket).into());
+            let result = build_rpn(initial);
+            assert!(result.is_ok());
+            let mut result = result.unwrap();
+            assert_eq!(result.len(), 3, "{result:?}");
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                result.pop_front().unwrap(),
+                BaseToken::Operator(Operator::Plus)
+            ));
+        }
+    }
+
+    #[cfg(test)]
+    mod compress_test {
+        use crate::formulas::root_formula::parser::compress_rpn;
+        use crate::formulas::root_formula::FormulaArgument;
+        use crate::tokens::{BaseToken, Operator};
+        use std::collections::VecDeque;
+
+        #[test]
+        fn easy_test() {
+            let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(3);
+            initial.push_back(1.0.into());
+            initial.push_back(2.0.into());
+            initial.push_back(Operator::Plus.into());
+            let result = compress_rpn(initial);
+            assert!(result.is_ok(), "{result:?}");
+            let result = result.unwrap();
+            assert!(
+                matches!(result, FormulaArgument::Number(val) if (val - 3.0).abs() < f64::EPSILON),
+                "{result:?}"
+            );
+        }
+    }
+}
+
+impl RootFormula {
+    /// Creates new `RootFormula`.
     pub fn new<T: Into<FormulaArgument>>(value: T) -> Self {
         Self { tree: value.into() }
     }
 
+    /// Parses [`&str`] into `RootFormula`.
+    ///
     /// # Errors
     ///
-    /// will return Err if non valid expression is passed
-    pub fn parse<T: GetParser>(expression: &str, formulas: &T) -> Result<Self, ParserError> {
-        let parsed = Self::lex_expression(expression, formulas)?;
-        let rpn = Self::build_rpn(parsed)?;
+    /// will return Err if non valid expression is passed.
+    pub fn parse<T: for<'a> GetFunction<'a>>(
+        expression: &str,
+        formulas: &T,
+    ) -> Result<Self, ParserError> {
+        let parsed = lex_expression(expression, formulas)?;
         Ok(Self {
-            tree: Self::compress_rpn(rpn)?,
+            tree: parse_tokens(parsed)?,
         })
     }
 }
 
-#[cfg(test)]
-mod lexer_test {
-    use crate::formula_stores::EmptyFormulaStore;
-    use crate::formulas::root_formula::RootFormula;
-    use crate::tokens::{BaseToken, NumberLike, Operator};
-
-    #[test]
-    fn remove_all_spaces() {
-        let mut expression = "     ";
-        RootFormula::remove_spaces(&mut expression);
-        assert_eq!(expression, "", "{expression}");
-    }
-
-    #[test]
-    fn remove_spaces_with_text() {
-        let mut expression = "     asd";
-        RootFormula::remove_spaces(&mut expression);
-        assert_eq!(expression, "asd", "{expression}");
-    }
-
-    #[test]
-    fn remove_spaces() {
-        let mut expression = "     asd   ";
-        RootFormula::remove_spaces(&mut expression);
-        assert_eq!(expression, "asd   ", "{expression}");
-    }
-
-    #[test]
-    fn number_parser() {
-        assert_eq!(RootFormula::parse_number(&mut "1"), Some(1.0));
-        assert_eq!(RootFormula::parse_number(&mut "-1"), Some(-1.0));
-        assert_eq!(RootFormula::parse_number(&mut "1.0"), Some(1.0));
-        assert_eq!(RootFormula::parse_number(&mut "1.1"), Some(1.1));
-        assert_eq!(RootFormula::parse_number(&mut "0.1"), Some(0.1));
-        assert_eq!(RootFormula::parse_number(&mut "0.0"), Some(0.0));
-        assert_eq!(RootFormula::parse_number(&mut "+"), None);
-        assert_eq!(RootFormula::parse_number(&mut "1.0001"), Some(1.0001));
-        assert_eq!(RootFormula::parse_number(&mut "-1.03456"), Some(-1.03456));
-    }
-
-    #[test]
-    fn basic_test_lex() {
-        let expression = "1+2";
-        let result = RootFormula::lex_expression(expression, &EmptyFormulaStore);
-
-        assert!(result.is_ok());
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 3);
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Plus)
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
-        ));
-    }
-
-    #[test]
-    fn space_test_lex() {
-        let expression = "  1 +   2 ";
-        let result = RootFormula::lex_expression(expression, &EmptyFormulaStore);
-
-        assert!(result.is_ok());
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 3);
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Plus)
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
-        ));
+impl<T: Into<FormulaArgument>> From<T> for RootFormula {
+    fn from(value: T) -> Self {
+        Self::new(value)
     }
 }
 
-#[cfg(test)]
-mod rpn_test {
-    use crate::formulas::root_formula::RootFormula;
-    use crate::tokens::{BaseToken, Bracket, CloseBracket, NumberLike, OpenBracket, Operator};
-    use std::collections::VecDeque;
+impl<T: Into<Self>> Add<T> for RootFormula {
+    type Output = Self;
 
-    #[test]
-    fn easy_rpn_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(3);
-        initial.push_back(1.0.into());
-        initial.push_back(Operator::Plus.into());
-        initial.push_back(2.0.into());
-        let result = RootFormula::build_rpn(initial);
-        assert!(result.is_ok());
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 3, "{result:?}");
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Plus)
-        ));
-    }
-
-    #[test]
-    fn bracket_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
-        initial.push_back(Bracket::OpenBracket(OpenBracket).into());
-        initial.push_back(1.0.into());
-        initial.push_back(Operator::Plus.into());
-        initial.push_back(2.0.into());
-        initial.push_back(Bracket::CloseBracket(CloseBracket).into());
-        initial.push_back(Operator::Multiply.into());
-        initial.push_back(5.0.into());
-        let result = RootFormula::build_rpn(initial);
-        assert!(result.is_ok(), "{result:?}");
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 5, "{result:?}");
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Plus)
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 5.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Multiply)
-        ));
-    }
-
-    #[test]
-    fn priority_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
-        initial.push_back(1.0.into());
-        initial.push_back(Operator::Multiply.into());
-        initial.push_back(2.0.into());
-        initial.push_back(Operator::Plus.into());
-        initial.push_back(5.0.into());
-        initial.push_back(Operator::Multiply.into());
-        initial.push_back(6.0.into());
-        let result = RootFormula::build_rpn(initial);
-        assert!(result.is_ok(), "{result:?}");
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 7, "{result:?}");
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Multiply)
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 5.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 6.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Multiply)
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Plus)
-        ));
-    }
-
-    #[test]
-    fn power_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
-        initial.push_back(5.0.into());
-        initial.push_back(Operator::Exponent.into());
-        initial.push_back(6.0.into());
-        initial.push_back(Operator::Exponent.into());
-        initial.push_back(7.0.into());
-        let result = RootFormula::build_rpn(initial);
-        assert!(result.is_ok(), "{result:?}");
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 5, "{result:?}");
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 5.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 6.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 7.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Exponent)
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Exponent)
-        ));
-    }
-
-    #[test]
-    fn double_wrong_bracket_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(6);
-        initial.push_back(Bracket::OpenBracket(OpenBracket).into());
-        initial.push_back(Bracket::OpenBracket(OpenBracket).into());
-        initial.push_back(1.0.into());
-        initial.push_back(Operator::Plus.into());
-        initial.push_back(2.0.into());
-        initial.push_back(Bracket::CloseBracket(CloseBracket).into());
-        let result = RootFormula::build_rpn(initial);
-        assert!(result.is_err(), "{result:?}");
-    }
-
-    #[test]
-    fn double_bracket_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(6);
-        initial.push_back(Bracket::OpenBracket(OpenBracket).into());
-        initial.push_back(Bracket::OpenBracket(OpenBracket).into());
-        initial.push_back(1.0.into());
-        initial.push_back(Operator::Plus.into());
-        initial.push_back(2.0.into());
-        initial.push_back(Bracket::CloseBracket(CloseBracket).into());
-        initial.push_back(Bracket::CloseBracket(CloseBracket).into());
-        let result = RootFormula::build_rpn(initial);
-        assert!(result.is_ok());
-        let mut result = result.unwrap();
-        assert_eq!(result.len(), 3, "{result:?}");
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 1.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::NumberLike(NumberLike::Number(val)) if (val - 2.0).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            result.pop_front().unwrap(),
-            BaseToken::Operator(Operator::Plus)
-        ));
-    }
-}
-
-#[cfg(test)]
-mod compress_test {
-    use crate::formulas::root_formula::FormulaArgument;
-    use crate::formulas::root_formula::RootFormula;
-    use crate::tokens::{BaseToken, Operator};
-    use std::collections::VecDeque;
-
-    #[test]
-    fn easy_test() {
-        let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(3);
-        initial.push_back(1.0.into());
-        initial.push_back(2.0.into());
-        initial.push_back(Operator::Plus.into());
-        let result = RootFormula::compress_rpn(initial);
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(
-            matches!(result, FormulaArgument::Number(val) if (val - 3.0).abs() < f64::EPSILON),
-            "{result:?}"
-        );
-    }
-}
-
-#[cfg(test)]
-mod parser_test {
-    use crate::formula_stores::EmptyFormulaStore;
-    use crate::formulas::root_formula::RootFormula;
-
-    #[test]
-    fn test_str_unchanged() {
-        let expression = "5 + 1";
-        let _ = RootFormula::parse(expression, &EmptyFormulaStore);
-        assert_eq!(expression, "5 + 1");
+    fn add(self, rhs: T) -> Self::Output {
+        Self::new(
+            Box::new(OperatorFormula::new(self, rhs.into(), Operator::Plus))
+                as Box<dyn FunctionLike>,
+        )
     }
 }

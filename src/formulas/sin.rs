@@ -1,10 +1,12 @@
-use crate::formula_stores::GetParser;
 use crate::formulas::root_formula::RootFormula;
 use crate::formulas::{
     Evaluate, EvaluationError, Function, FunctionLike, IsConst, MathError, ParserError,
 };
-use crate::variable_stores::GetVariable;
+use crate::function_stores::GetFunction;
+use crate::variable_stores::{GetVariable, Variable};
+use std::sync::Arc;
 
+/// Function for calculating `Sin` of argument.
 #[derive(Debug)]
 pub struct Sin {
     argument: RootFormula,
@@ -27,8 +29,34 @@ impl FunctionLike for Sin {
         self.argument.collapse_inner()
     }
 
-    fn set_variables_shared(&mut self, args: &dyn GetVariable) {
-        self.argument.set_variables_shared(args);
+    #[allow(clippy::semicolon_if_nothing_returned)]
+    #[inline]
+    fn set_all_variables_shared(&mut self, args: &dyn GetVariable) {
+        self.argument.set_all_variables_shared(args)
+    }
+
+    #[allow(clippy::semicolon_if_nothing_returned)]
+    #[inline]
+    fn set_all_variables_owned(&mut self, args: &dyn GetVariable) {
+        self.argument.set_all_variables_owned(args)
+    }
+
+    #[allow(clippy::semicolon_if_nothing_returned)]
+    #[inline]
+    fn set_variable_shared(&mut self, name: &Variable, function: &Arc<RootFormula>) {
+        self.argument.set_variable_shared(name, function)
+    }
+
+    #[allow(clippy::semicolon_if_nothing_returned)]
+    #[inline]
+    fn set_variable_owned(&mut self, name: &Variable, function: &RootFormula) {
+        self.argument.set_variable_owned(name, function)
+    }
+
+    fn clone_into_box(&self) -> Box<dyn FunctionLike> {
+        Box::new(Self {
+            argument: self.argument.clone(),
+        })
     }
 }
 
@@ -37,7 +65,10 @@ impl Function for Sin {
     const MAX_NUMBER_OF_ARGUMENTS: usize = 1;
     const NAME: &'static str = "sin";
 
-    fn parse<T: GetParser>(arguments: &[&str], formulas: &T) -> Result<Self, ParserError>
+    fn parse<T: for<'a> GetFunction<'a>>(
+        arguments: &[&str],
+        formulas: &T,
+    ) -> Result<Self, ParserError>
     where
         Self: Sized,
     {

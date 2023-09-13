@@ -1,29 +1,30 @@
-use crate::function_stores::GetFunction;
-use crate::lib::boxed::Box;
+use crate::__lib::boxed::Box;
 #[cfg(any(feature = "std", nightly))]
-use crate::lib::error::Error;
-use crate::lib::fmt::{Debug, Display, Formatter};
-use crate::lib::string::String;
-use crate::lib::sync::Arc;
+use crate::__lib::error::Error;
+use crate::__lib::fmt::{Debug, Display, Formatter};
+use crate::__lib::string::String;
+use crate::__lib::sync::Arc;
+use crate::function_stores::GetFunction;
 use crate::variable_stores::{GetVariable, Variable};
 
+/// Provides macros for fast construction of functions.
+#[macro_use]
+pub mod macros;
+/// Provides base mathematical functions.
+pub mod math;
 mod min;
 pub(crate) mod operator;
 mod root_formula;
-#[cfg(any(feature = "std", feature = "libm"))]
-mod sin;
 
 pub use min::Min;
 pub use root_formula::RootFormula;
-#[cfg(any(feature = "std", feature = "libm"))]
-pub use sin::Sin;
 
 /// The error type which is returned from parsing unknown token in expression.
 #[derive(Debug)]
 pub struct UnknownTokenError(String);
 
 impl Display for UnknownTokenError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         write!(f, "Got unknown token {}", self.0)
     }
 }
@@ -36,7 +37,7 @@ impl Error for UnknownTokenError {}
 pub struct ParenthesisError;
 
 impl Display for ParenthesisError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         write!(f, "Wrong number of parenthesis")
     }
 }
@@ -49,7 +50,7 @@ impl Error for ParenthesisError {}
 pub struct ArgumentsError(String);
 
 impl Display for ArgumentsError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         write!(f, "wrong number of arguments for {}", self.0)
     }
 }
@@ -63,7 +64,7 @@ impl Error for ArgumentsError {}
 pub struct MathError(String);
 
 impl Display for MathError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         write!(f, "Failed to evaluate {}", self.0)
     }
 }
@@ -85,7 +86,7 @@ impl NoVariableError {
 }
 
 impl Display for NoVariableError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         write!(f, "No variable with name {} in variable store", self.name)
     }
 }
@@ -104,7 +105,7 @@ pub enum EvaluationError {
 }
 
 impl Display for EvaluationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         match self {
             Self::MathError(e) => Display::fmt(e, f),
             Self::NoVariableError(e) => Display::fmt(e, f),
@@ -130,7 +131,7 @@ pub enum ParserError {
 }
 
 impl Display for ParserError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         match self {
             Self::UnknownTokenError(e) => Display::fmt(e, f),
             Self::ParenthesisError(e) => Display::fmt(e, f),

@@ -37,7 +37,6 @@ impl<'a> GetFunction<'a> for HashMapFunctionStore {
         &'b self,
         formula_name: &str,
     ) -> Option<(Box<Parser<'b>>, ArgumentBounds)> {
-        self.0.iter();
         self.0.get(formula_name).map(move |(parser, bounds)| {
             (
                 Box::new(move |arguments: &[&str]| (*parser)(arguments, self)) as Box<Parser>,

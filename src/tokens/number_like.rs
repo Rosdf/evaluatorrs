@@ -1,4 +1,4 @@
-use crate::lib::string::String;
+use crate::__lib::string::String;
 use crate::variable_stores::Variable;
 
 #[derive(Debug, PartialEq, Clone)]

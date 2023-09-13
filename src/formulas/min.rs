@@ -1,11 +1,11 @@
+use crate::__lib::boxed::Box;
+use crate::__lib::sync::Arc;
+use crate::__lib::vec::Vec;
 use crate::formulas::root_formula::RootFormula;
 use crate::formulas::{
     Evaluate, EvaluationError, Function, FunctionLike, IsConst, MathError, ParserError,
 };
 use crate::function_stores::GetFunction;
-use crate::lib::boxed::Box;
-use crate::lib::sync::Arc;
-use crate::lib::vec::Vec;
 use crate::variable_stores::{GetVariable, Variable};
 
 /// Function for calculating min of it's arguments.

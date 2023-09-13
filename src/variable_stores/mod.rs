@@ -2,11 +2,11 @@ mod empty_store;
 #[cfg(feature = "std")]
 mod hashmap_store;
 
+use crate::__lib::fmt::{Display, Formatter};
+use crate::__lib::string::String;
+use crate::__lib::sync::Arc;
 use crate::formulas::RootFormula;
 use crate::formulas::{Evaluate, EvaluationError, IsConst, NoVariableError};
-use crate::lib::fmt::{Display, Formatter};
-use crate::lib::string::String;
-use crate::lib::sync::Arc;
 pub use crate::variable_stores::empty_store::EmptyVariableStore;
 #[cfg(feature = "std")]
 pub use crate::variable_stores::hashmap_store::HashMapVariableStore;
@@ -16,7 +16,7 @@ pub use crate::variable_stores::hashmap_store::HashMapVariableStore;
 pub struct Variable(String);
 
 impl Display for Variable {
-    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
         write!(f, "{self:?}")
     }
 }

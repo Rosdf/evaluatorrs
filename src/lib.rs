@@ -20,7 +20,7 @@
 //! by user.
 //!
 //! ## Evaluate simple expression
-//! ```
+//! ```rust
 //! use evaluatorrs::eval;
 //!
 //! fn evaluate() {
@@ -61,7 +61,10 @@ pub fn eval(expression: &str) -> Result<f64, ParserError> {
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-mod lib {
+// this mod is needed for easier access to non std.
+// marked as pub for using inside of public macros.
+#[doc(hidden)]
+pub mod __lib {
     pub mod boxed {
         #[cfg(not(feature = "std"))]
         pub use alloc::boxed::Box;
@@ -70,8 +73,10 @@ mod lib {
     }
     pub mod string {
         #[cfg(not(feature = "std"))]
+        #[allow(clippy::module_name_repetitions)]
         pub use alloc::string::{String, ToString};
         #[cfg(feature = "std")]
+        #[allow(clippy::module_name_repetitions)]
         pub use std::string::{String, ToString};
     }
     pub mod sync {
@@ -100,8 +105,10 @@ mod lib {
     }
     pub mod str {
         #[cfg(not(feature = "std"))]
+        #[allow(clippy::module_name_repetitions)]
         pub use core::str::FromStr;
         #[cfg(feature = "std")]
+        #[allow(clippy::module_name_repetitions)]
         pub use std::str::FromStr;
     }
     pub mod collections {
@@ -127,5 +134,11 @@ mod lib {
         pub use core::iter::{empty, Empty};
         #[cfg(feature = "std")]
         pub use std::iter::{empty, Empty};
+    }
+    pub mod slice {
+        #[cfg(not(feature = "std"))]
+        pub use core::slice::Iter;
+        #[cfg(feature = "std")]
+        pub use std::slice::Iter;
     }
 }

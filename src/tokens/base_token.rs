@@ -1,5 +1,5 @@
+use crate::__lib::boxed::Box;
 use crate::formulas::FunctionLike;
-use crate::lib::boxed::Box;
 use crate::tokens::number_like::NumberLike;
 use crate::tokens::operator::Operator;
 use crate::variable_stores::Variable;

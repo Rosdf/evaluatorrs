@@ -1,20 +1,20 @@
+use crate::__lib::boxed::Box;
+use crate::__lib::fmt::Debug;
+use crate::__lib::ops::Add;
 use crate::formulas::root_formula::formula_argument::FormulaArgument;
 use crate::formulas::root_formula::lexer::lex_expression;
 use crate::formulas::{Evaluate, EvaluationError, FunctionLike, IsConst, MathError, ParserError};
 use crate::function_stores::GetFunction;
-use crate::lib::boxed::Box;
-use crate::lib::fmt::Debug;
-use crate::lib::ops::Add;
 use crate::tokens::{BaseToken, Operator};
 use crate::variable_stores::{EmptyVariableStore, GetVariable, Variable};
 
+use crate::__lib::sync::Arc;
 use crate::formulas::operator::OperatorFormula;
 use crate::formulas::root_formula::parser::parse_tokens;
-use crate::lib::sync::Arc;
 
 mod formula_argument {
     use super::{Arc, BaseToken, Debug, FunctionLike, Variable};
-    use crate::lib::boxed::Box;
+    use crate::__lib::boxed::Box;
     use crate::tokens::NumberLike;
     use core::convert::TryFrom;
 
@@ -212,13 +212,13 @@ impl FunctionLike for RootFormula {
 }
 
 mod lexer {
+    use crate::__lib::boxed::Box;
+    use crate::__lib::collections::VecDeque;
+    use crate::__lib::str::FromStr;
+    use crate::__lib::string::ToString;
+    use crate::__lib::vec::Vec;
     use crate::formulas::{ArgumentsError, FunctionLike, ParserError, UnknownTokenError};
     use crate::function_stores::GetFunction;
-    use crate::lib::boxed::Box;
-    use crate::lib::collections::VecDeque;
-    use crate::lib::str::FromStr;
-    use crate::lib::string::ToString;
-    use crate::lib::vec::Vec;
     use crate::tokens::{BaseToken, Bracket, Operator};
     use crate::variable_stores::Variable;
 
@@ -429,9 +429,15 @@ mod lexer {
             collect_arguments, lex_expression, lex_function, lex_number, lex_parenthesis,
             remove_spaces,
         };
-        use crate::formulas::sin::Sin;
-        use crate::function_stores::{EmptyFunctionStore, HashMapFunctionStore, RegisterParser};
+        use crate::function_stores::{EmptyFunctionStore, RegisterParser, VecFunctionStore};
         use crate::tokens::{BaseToken, Bracket, NumberLike, Operator};
+
+        impl_one_arg_function!(
+            "ident",
+            (|x: f64| x),
+            /// Natural logarithm function.
+            Ident
+        );
 
         #[test]
         fn test_lex_open_bracket() {
@@ -533,9 +539,9 @@ mod lexer {
 
         #[test]
         fn test_function_lex() {
-            let mut store = HashMapFunctionStore::new();
-            store.register::<Sin>();
-            let mut expression = "sin(a)";
+            let mut store = VecFunctionStore::new();
+            store.register::<Ident>();
+            let mut expression = "ident(a)";
             let res = lex_function(&mut expression, &store);
             assert!(res.is_some(), "{res:?}");
             let res = res.unwrap();
@@ -556,15 +562,15 @@ mod lexer {
 }
 
 mod parser {
+    use crate::__lib::collections::VecDeque;
+    use crate::__lib::convert::TryInto;
+    use crate::__lib::string::ToString;
+    use crate::__lib::vec::Vec;
     use crate::formulas::root_formula::formula_argument::FormulaArgument;
     use crate::formulas::root_formula::RootFormula;
     use crate::formulas::{
         ArgumentsError, EvaluationError, FunctionLike, MathError, ParenthesisError, ParserError,
     };
-    use crate::lib::collections::VecDeque;
-    use crate::lib::convert::TryInto;
-    use crate::lib::string::ToString;
-    use crate::lib::vec::Vec;
     use crate::tokens::{BaseToken, Bracket, OpenBracket, Operator, Side};
     use crate::variable_stores::EmptyVariableStore;
 
@@ -730,8 +736,8 @@ mod parser {
 
     #[cfg(test)]
     mod rpn_test {
+        use crate::__lib::collections::VecDeque;
         use crate::formulas::root_formula::parser::build_rpn;
-        use crate::lib::collections::VecDeque;
         use crate::tokens::{BaseToken, Bracket, CloseBracket, NumberLike, OpenBracket, Operator};
 
         #[test]
@@ -916,9 +922,9 @@ mod parser {
 
     #[cfg(test)]
     mod compress_test {
+        use crate::__lib::collections::VecDeque;
         use crate::formulas::root_formula::parser::compress_rpn;
         use crate::formulas::root_formula::FormulaArgument;
-        use crate::lib::collections::VecDeque;
         use crate::tokens::{BaseToken, Operator};
 
         #[test]

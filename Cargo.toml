@@ -23,8 +23,15 @@ harness = false
 [dependencies]
 libm = { version = "0.2.7", optional = true }
 
+[build-dependencies]
+
 [features]
 default = ["std"]
+
+# Provide impls for common standard library types like Vec<T> and HashMap<K, V>.
+# Requires a dependency on the Rust standard library.
 std = []
+
+# Provide ability to calculate complex mathematical functions without std lib.
 libm = ["dep:libm"]
 

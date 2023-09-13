@@ -1,13 +1,14 @@
+mod array_store;
+pub use array_store::VecFunctionStore;
 mod empty_store;
+pub use empty_store::EmptyFunctionStore;
 #[cfg(feature = "std")]
 mod hashmap_store;
-
-use crate::formulas::{Function, FunctionLike, ParserError};
-use crate::lib::boxed::Box;
-pub use empty_store::EmptyFunctionStore;
-
 #[cfg(feature = "std")]
 pub use hashmap_store::HashMapFunctionStore;
+
+use crate::__lib::boxed::Box;
+use crate::formulas::{Function, FunctionLike, ParserError};
 
 /// Provides information about bounds on arguments number of function.
 #[derive(Clone, Debug)]

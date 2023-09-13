@@ -1,7 +1,7 @@
+use crate::__lib::boxed::Box;
+use crate::__lib::iter::{empty, Empty};
 use crate::formulas::Function;
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
-use crate::lib::boxed::Box;
-use crate::lib::iter::{empty, Empty};
 
 /// Function store that can not contain any functions.
 #[derive(Debug, Default, Copy, Clone)]

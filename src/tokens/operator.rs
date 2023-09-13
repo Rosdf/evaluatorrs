@@ -1,7 +1,7 @@
 use crate::formulas::operator::OperatorFormula;
 use crate::formulas::RootFormula;
 
-#[cfg(feature = "libm")]
+#[cfg(all(not(feature = "std"), feature = "libm"))]
 fn exponential_function(base: f64, power: f64) -> f64 {
     libm::Libm::<f64>::pow(base, power)
 }

@@ -1,8 +1,8 @@
+use crate::__lib::boxed::Box;
+use crate::__lib::sync::Arc;
 use crate::formulas::Function;
 use crate::formulas::RootFormula;
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
-use crate::lib::boxed::Box;
-use crate::lib::sync::Arc;
 use crate::variable_stores::{GetVariable, SetVariable, Variable};
 
 /// Struct for interacting with variable store and function store.

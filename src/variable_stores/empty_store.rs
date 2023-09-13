@@ -1,5 +1,5 @@
+use crate::__lib::sync::Arc;
 use crate::formulas::RootFormula;
-use crate::lib::sync::Arc;
 use crate::variable_stores::{GetVariable, SetVariable, Variable};
 
 /// Variable store that can not contain any functions.

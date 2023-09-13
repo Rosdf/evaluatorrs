@@ -75,5 +75,5 @@ fn big_expression(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, big_expression); //, singl_token_bench, singl_eval_bench);
+criterion_group!(benches, big_expression, singl_token_bench, singl_eval_bench);
 criterion_main!(benches);

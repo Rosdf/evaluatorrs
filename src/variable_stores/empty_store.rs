@@ -1,6 +1,6 @@
 use crate::formulas::RootFormula;
+use crate::lib::sync::Arc;
 use crate::variable_stores::{GetVariable, SetVariable, Variable};
-use std::sync::Arc;
 
 /// Variable store that can not contain any functions.
 #[derive(Debug, Copy, Clone)]

@@ -1,16 +1,21 @@
 use crate::function_stores::GetFunction;
+use crate::lib::boxed::Box;
+#[cfg(any(feature = "std", nightly))]
+use crate::lib::error::Error;
+use crate::lib::fmt::{Debug, Display, Formatter};
+use crate::lib::string::String;
+use crate::lib::sync::Arc;
 use crate::variable_stores::{GetVariable, Variable};
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-use std::sync::Arc;
 
 mod min;
 pub(crate) mod operator;
 mod root_formula;
+#[cfg(any(feature = "std", feature = "libm"))]
 mod sin;
 
 pub use min::Min;
 pub use root_formula::RootFormula;
+#[cfg(any(feature = "std", feature = "libm"))]
 pub use sin::Sin;
 
 /// The error type which is returned from parsing unknown token in expression.
@@ -18,11 +23,12 @@ pub use sin::Sin;
 pub struct UnknownTokenError(String);
 
 impl Display for UnknownTokenError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         write!(f, "Got unknown token {}", self.0)
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for UnknownTokenError {}
 
 /// The error type which is returned when expression contains wrong number of opening and closing parenthesis.
@@ -30,11 +36,12 @@ impl Error for UnknownTokenError {}
 pub struct ParenthesisError;
 
 impl Display for ParenthesisError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         write!(f, "Wrong number of parenthesis")
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for ParenthesisError {}
 
 /// The error type which is returned when function gets wrong number of arguments.
@@ -42,11 +49,12 @@ impl Error for ParenthesisError {}
 pub struct ArgumentsError(String);
 
 impl Display for ArgumentsError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         write!(f, "wrong number of arguments for {}", self.0)
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for ArgumentsError {}
 
 /// The error type which is returned when function can not be evaluated.
@@ -55,11 +63,12 @@ impl Error for ArgumentsError {}
 pub struct MathError(String);
 
 impl Display for MathError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         write!(f, "Failed to evaluate {}", self.0)
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for MathError {}
 
 /// The error type which is returned when [`GetVariable`] does not contain variable, that is needed for formula evaluation.
@@ -76,11 +85,12 @@ impl NoVariableError {
 }
 
 impl Display for NoVariableError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         write!(f, "No variable with name {} in variable store", self.name)
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for NoVariableError {}
 
 /// The error variants which are returned when failed to evaluate formula for any reason.
@@ -94,7 +104,7 @@ pub enum EvaluationError {
 }
 
 impl Display for EvaluationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         match self {
             Self::MathError(e) => Display::fmt(e, f),
             Self::NoVariableError(e) => Display::fmt(e, f),
@@ -102,6 +112,7 @@ impl Display for EvaluationError {
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for EvaluationError {}
 
 /// The error variants which are returned when failed to parse formula for any reason.
@@ -119,7 +130,7 @@ pub enum ParserError {
 }
 
 impl Display for ParserError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         match self {
             Self::UnknownTokenError(e) => Display::fmt(e, f),
             Self::ParenthesisError(e) => Display::fmt(e, f),
@@ -129,6 +140,7 @@ impl Display for ParserError {
     }
 }
 
+#[cfg(any(feature = "std", nightly))]
 impl Error for ParserError {}
 
 impl From<EvaluationError> for ParserError {

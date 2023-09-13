@@ -8,6 +8,7 @@
 )]
 #![allow(clippy::redundant_pub_crate, clippy::must_use_candidate)]
 #![deny(missing_debug_implementations, missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 //! # Evaluator rs
 //!
@@ -55,4 +56,76 @@ pub use context::Context;
 #[inline]
 pub fn eval(expression: &str) -> Result<f64, ParserError> {
     Ok(RootFormula::parse(expression, &EmptyFunctionStore)?.eval(&EmptyVariableStore)?)
+}
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+mod lib {
+    pub mod boxed {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::boxed::Box;
+        #[cfg(feature = "std")]
+        pub use std::boxed::Box;
+    }
+    pub mod string {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::string::{String, ToString};
+        #[cfg(feature = "std")]
+        pub use std::string::{String, ToString};
+    }
+    pub mod sync {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::sync::Arc;
+        #[cfg(feature = "std")]
+        pub use std::sync::Arc;
+    }
+    pub mod fmt {
+        #[cfg(not(feature = "std"))]
+        pub use core::fmt::{Debug, Display, Formatter, Result};
+        #[cfg(feature = "std")]
+        pub use std::fmt::{Debug, Display, Formatter, Result};
+    }
+    pub mod error {
+        #[cfg(all(feature = "std", nightly))]
+        pub use core::error::Error;
+        #[cfg(feature = "std")]
+        pub use std::error::Error;
+    }
+    pub mod ops {
+        #[cfg(not(feature = "std"))]
+        pub use core::ops::Add;
+        #[cfg(feature = "std")]
+        pub use std::ops::Add;
+    }
+    pub mod str {
+        #[cfg(not(feature = "std"))]
+        pub use core::str::FromStr;
+        #[cfg(feature = "std")]
+        pub use std::str::FromStr;
+    }
+    pub mod collections {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::collections::VecDeque;
+        #[cfg(feature = "std")]
+        pub use std::collections::VecDeque;
+    }
+    pub mod vec {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::vec::Vec;
+        #[cfg(feature = "std")]
+        pub use std::vec::Vec;
+    }
+    pub mod convert {
+        #[cfg(not(feature = "std"))]
+        pub use core::convert::TryInto;
+        #[cfg(feature = "std")]
+        pub use std::convert::TryInto;
+    }
+    pub mod iter {
+        #[cfg(not(feature = "std"))]
+        pub use core::iter::{empty, Empty};
+        #[cfg(feature = "std")]
+        pub use std::iter::{empty, Empty};
+    }
 }

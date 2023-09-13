@@ -3,8 +3,10 @@ use crate::formulas::{
     Evaluate, EvaluationError, Function, FunctionLike, IsConst, MathError, ParserError,
 };
 use crate::function_stores::GetFunction;
+use crate::lib::boxed::Box;
+use crate::lib::sync::Arc;
+use crate::lib::vec::Vec;
 use crate::variable_stores::{GetVariable, Variable};
-use std::sync::Arc;
 
 /// Function for calculating min of it's arguments.
 #[derive(Debug)]

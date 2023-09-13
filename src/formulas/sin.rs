@@ -3,8 +3,19 @@ use crate::formulas::{
     Evaluate, EvaluationError, Function, FunctionLike, IsConst, MathError, ParserError,
 };
 use crate::function_stores::GetFunction;
+use crate::lib::boxed::Box;
+use crate::lib::sync::Arc;
 use crate::variable_stores::{GetVariable, Variable};
-use std::sync::Arc;
+
+#[cfg(feature = "libm")]
+fn sin_function(argument: f64) -> f64 {
+    libm::Libm::<f64>::sin(argument)
+}
+
+#[cfg(feature = "std")]
+fn sin_function(argument: f64) -> f64 {
+    argument.sin()
+}
 
 /// Function for calculating `Sin` of argument.
 #[derive(Debug)]
@@ -20,7 +31,7 @@ impl IsConst for Sin {
 
 impl Evaluate for Sin {
     fn eval(&self, args: &dyn GetVariable) -> Result<f64, EvaluationError> {
-        Ok(self.argument.eval(args)?.sin())
+        Ok(sin_function(self.argument.eval(args)?))
     }
 }
 

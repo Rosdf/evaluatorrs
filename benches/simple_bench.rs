@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use evalexpr::{eval, eval_empty_with_context_mut, Context, HashMapContext};
-use evaluatorrs::formulas::root_formula::RootFormula;
-use evaluatorrs::formulas::sin::Sin;
 use evaluatorrs::formulas::Evaluate;
+use evaluatorrs::formulas::RootFormula;
+use evaluatorrs::formulas::Sin;
 use evaluatorrs::function_stores::{EmptyFunctionStore, HashMapFunctionStore, RegisterParser};
 use evaluatorrs::variable_stores::{EmptyVariableStore, HashMapVariableStore, SetVariable};
 use std::hint::black_box;

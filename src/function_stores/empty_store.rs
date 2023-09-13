@@ -1,6 +1,7 @@
 use crate::formulas::Function;
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
-use std::iter::Empty;
+use crate::lib::boxed::Box;
+use crate::lib::iter::{empty, Empty};
 
 /// Function store that can not contain any functions.
 #[derive(Debug, Default, Copy, Clone)]
@@ -17,7 +18,7 @@ impl<'a> GetFunction<'a> for EmptyFunctionStore {
     }
 
     fn iter(&self) -> Self::Iter {
-        std::iter::empty()
+        empty()
     }
 }
 

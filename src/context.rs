@@ -1,8 +1,9 @@
 use crate::formulas::Function;
 use crate::formulas::RootFormula;
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
+use crate::lib::boxed::Box;
+use crate::lib::sync::Arc;
 use crate::variable_stores::{GetVariable, SetVariable, Variable};
-use std::sync::Arc;
 
 /// Struct for interacting with variable store and function store.
 #[derive(Debug, Default, Clone)]

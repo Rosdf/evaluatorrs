@@ -1,10 +1,13 @@
 mod empty_store;
+#[cfg(feature = "std")]
 mod hashmap_store;
 
 use crate::formulas::{Function, FunctionLike, ParserError};
-pub use crate::function_stores::{
-    empty_store::EmptyFunctionStore, hashmap_store::HashMapFunctionStore,
-};
+use crate::lib::boxed::Box;
+pub use empty_store::EmptyFunctionStore;
+
+#[cfg(feature = "std")]
+pub use hashmap_store::HashMapFunctionStore;
 
 /// Provides information about bounds on arguments number of function.
 #[derive(Clone, Debug)]

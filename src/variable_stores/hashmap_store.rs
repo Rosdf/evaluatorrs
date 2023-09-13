@@ -1,5 +1,6 @@
 use crate::formulas::RootFormula;
 use crate::variable_stores::{GetVariable, SetVariable, Variable};
+// We can use std, because this module is not imported, when no_std feature is enabled.
 use std::collections::HashMap;
 use std::sync::Arc;
 

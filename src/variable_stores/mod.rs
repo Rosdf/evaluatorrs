@@ -1,25 +1,28 @@
 mod empty_store;
+#[cfg(feature = "std")]
 mod hashmap_store;
 
 use crate::formulas::RootFormula;
 use crate::formulas::{Evaluate, EvaluationError, IsConst, NoVariableError};
+use crate::lib::fmt::{Display, Formatter};
+use crate::lib::string::String;
+use crate::lib::sync::Arc;
 pub use crate::variable_stores::empty_store::EmptyVariableStore;
+#[cfg(feature = "std")]
 pub use crate::variable_stores::hashmap_store::HashMapVariableStore;
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
 
-/// Type that stored in variable store as "key"
+/// Type that stored in variable store as "key".
 #[derive(Debug, PartialEq, Hash, Eq, Clone)]
 pub struct Variable(String);
 
 impl Display for Variable {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> crate::lib::fmt::Result {
         write!(f, "{self:?}")
     }
 }
 
 impl Variable {
-    /// Methode for creating new Variable
+    /// Methode for creating new Variable.
     #[inline]
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())

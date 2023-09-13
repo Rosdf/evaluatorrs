@@ -8,6 +8,7 @@ license = "MIT"
 keywords = ["math", "expression", "evaluation"]
 categories = ["parsing-tools"]
 edition = "2021"
+rust-version = "1.72"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,3 +21,10 @@ name = "simple_bench"
 harness = false
 
 [dependencies]
+libm = { version = "0.2.7", optional = true }
+
+[features]
+default = ["std"]
+std = []
+libm = ["dep:libm"]
+

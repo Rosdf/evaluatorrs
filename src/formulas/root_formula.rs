@@ -2,18 +2,21 @@ use crate::formulas::root_formula::formula_argument::FormulaArgument;
 use crate::formulas::root_formula::lexer::lex_expression;
 use crate::formulas::{Evaluate, EvaluationError, FunctionLike, IsConst, MathError, ParserError};
 use crate::function_stores::GetFunction;
+use crate::lib::boxed::Box;
+use crate::lib::fmt::Debug;
+use crate::lib::ops::Add;
 use crate::tokens::{BaseToken, Operator};
 use crate::variable_stores::{EmptyVariableStore, GetVariable, Variable};
-use std::fmt::Debug;
-use std::ops::Add;
 
 use crate::formulas::operator::OperatorFormula;
 use crate::formulas::root_formula::parser::parse_tokens;
-use std::sync::Arc;
+use crate::lib::sync::Arc;
 
 mod formula_argument {
     use super::{Arc, BaseToken, Debug, FunctionLike, Variable};
+    use crate::lib::boxed::Box;
     use crate::tokens::NumberLike;
+    use core::convert::TryFrom;
 
     #[derive(Debug)]
     #[non_exhaustive]
@@ -22,6 +25,14 @@ mod formula_argument {
         Variable(Variable),
         OwnedFunction(Box<dyn FunctionLike>),
         SharedFunction(Arc<dyn FunctionLike>),
+    }
+
+    pub const TMP_FORMULA_ARGUMENT: FormulaArgument = FormulaArgument::Number(f64::NAN);
+
+    impl Default for FormulaArgument {
+        fn default() -> Self {
+            TMP_FORMULA_ARGUMENT
+        }
     }
 
     impl From<NumberLike> for FormulaArgument {
@@ -123,13 +134,9 @@ impl FunctionLike for RootFormula {
             });
             return Ok(());
         }
-        if let FormulaArgument::SharedFunction(function) = &self.tree {
-            if Arc::strong_count(function) == 1 {
-                self.tree = FormulaArgument::OwnedFunction(
-                    // SAFETY: since strong reference count is 1, we are the only holder of Arc
-                    // and can safely convert it to Box
-                    unsafe { Box::from_raw(Arc::as_ptr(function).cast_mut()) },
-                );
+        if let FormulaArgument::SharedFunction(function) = &mut self.tree {
+            if let Some(func) = Arc::get_mut(function) {
+                self.tree = FormulaArgument::OwnedFunction(func.clone_into_box());
             }
         }
         if let FormulaArgument::OwnedFunction(function) = &mut self.tree {
@@ -207,10 +214,13 @@ impl FunctionLike for RootFormula {
 mod lexer {
     use crate::formulas::{ArgumentsError, FunctionLike, ParserError, UnknownTokenError};
     use crate::function_stores::GetFunction;
+    use crate::lib::boxed::Box;
+    use crate::lib::collections::VecDeque;
+    use crate::lib::str::FromStr;
+    use crate::lib::string::ToString;
+    use crate::lib::vec::Vec;
     use crate::tokens::{BaseToken, Bracket, Operator};
     use crate::variable_stores::Variable;
-    use std::collections::VecDeque;
-    use std::str::FromStr;
 
     fn lex_parenthesis(expression: &mut &str) -> Option<Bracket> {
         if expression.is_empty() {
@@ -551,9 +561,12 @@ mod parser {
     use crate::formulas::{
         ArgumentsError, EvaluationError, FunctionLike, MathError, ParenthesisError, ParserError,
     };
+    use crate::lib::collections::VecDeque;
+    use crate::lib::convert::TryInto;
+    use crate::lib::string::ToString;
+    use crate::lib::vec::Vec;
     use crate::tokens::{BaseToken, Bracket, OpenBracket, Operator, Side};
     use crate::variable_stores::EmptyVariableStore;
-    use std::collections::VecDeque;
 
     enum OperatorStackToken {
         Operator(Operator),
@@ -718,8 +731,8 @@ mod parser {
     #[cfg(test)]
     mod rpn_test {
         use crate::formulas::root_formula::parser::build_rpn;
+        use crate::lib::collections::VecDeque;
         use crate::tokens::{BaseToken, Bracket, CloseBracket, NumberLike, OpenBracket, Operator};
-        use std::collections::VecDeque;
 
         #[test]
         fn easy_rpn_test() {
@@ -905,8 +918,8 @@ mod parser {
     mod compress_test {
         use crate::formulas::root_formula::parser::compress_rpn;
         use crate::formulas::root_formula::FormulaArgument;
+        use crate::lib::collections::VecDeque;
         use crate::tokens::{BaseToken, Operator};
-        use std::collections::VecDeque;
 
         #[test]
         fn easy_test() {
@@ -963,3 +976,6 @@ impl<T: Into<Self>> Add<T> for RootFormula {
         )
     }
 }
+
+#[cfg(test)]
+mod test_root_formula {}

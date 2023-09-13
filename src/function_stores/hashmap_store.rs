@@ -1,13 +1,15 @@
 use crate::formulas::{Function, FunctionLike, ParserError};
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
+// We can use std, because this module is not imported, when no_std feature is enabled.
 use std::collections::hash_map::Keys;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 type InnerFunctionParser =
     fn(&[&str], &HashMapFunctionStore) -> Result<Box<dyn FunctionLike>, ParserError>;
 
 /// Function store based on [`HashMap`].
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct HashMapFunctionStore(HashMap<&'static str, (InnerFunctionParser, ArgumentBounds)>);
 
 impl HashMapFunctionStore {
@@ -36,7 +38,7 @@ impl<'a> GetFunction<'a> for HashMapFunctionStore {
         formula_name: &str,
     ) -> Option<(Box<Parser<'b>>, ArgumentBounds)> {
         self.0.iter();
-        self.0.get(formula_name).map(|(parser, bounds)| {
+        self.0.get(formula_name).map(move |(parser, bounds)| {
             (
                 Box::new(move |arguments: &[&str]| (*parser)(arguments, self)) as Box<Parser>,
                 bounds.clone(),

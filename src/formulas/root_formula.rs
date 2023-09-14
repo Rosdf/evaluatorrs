@@ -80,7 +80,7 @@ mod formula_argument {
     }
 }
 
-/// Struct to store information about the formula.
+/// Base primitive to use in other formulas.
 #[derive(Debug, Default)]
 pub struct RootFormula {
     tree: FormulaArgument,

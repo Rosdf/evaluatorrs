@@ -22,11 +22,13 @@
 //! ## Evaluate simple expression
 //! ```rust
 //! use evaluatorrs::eval;
+//! use evaluatorrs::formulas::ParserError;
 //!
-//! fn evaluate() {
+//! fn evaluate() -> Result<(), ParserError> {
 //!     let expression = "1 + 2";
-//!     let result = eval(expression).unwrap();
+//!     let result = eval(expression)?;
 //!     debug_assert_eq!(result, 3.0);
+//!     Ok(())
 //! }
 //! ```
 //!
@@ -114,15 +116,16 @@
 //!     }
 //! }
 //!
-//! fn try_parse() {
+//! fn try_parse() -> Result<(), ParserError> {
 //!     let mut function_store = VectorFunctionStore::new();
 //!     function_store.register::<Average>();
 //!     let parsed = RootFormula::parse("avg(1, 2, 3)", &function_store);
 //!     assert!(parsed.is_ok());
-//!     let parsed = parsed.unwrap();
+//!     let parsed = parsed?;
 //!     let res = parsed.eval(&EmptyVariableStore);
 //!     assert!(res.is_ok());
-//!     assert_eq!(res.unwrap(), 2.0);
+//!     assert_eq!(res?, 2.0);
+//!     Ok(())
 //! }
 //! ```
 //!
@@ -131,16 +134,16 @@
 //! # use evaluatorrs::formulas::{Evaluate, RootFormula};
 //! # use evaluatorrs::function_stores::EmptyFunctionStore;
 //! # #[cfg(feature = "std")]
-//! fn example() {
+//! fn example() -> Result<(), ParserError> {
 //!     # use evaluatorrs::variable_stores::{HashMapVariableStore, SetVariable};
 //!
-//!     let formula = RootFormula::parse("a + b", &EmptyFunctionStore).unwrap();
+//!     let formula = RootFormula::parse("a + b", &EmptyFunctionStore)?;
 //!     let mut variable_store = HashMapVariableStore::new();
-//!     variable_store.set("a", RootFormula::parse("1", &EmptyFunctionStore).unwrap());
-//!     variable_store.set("b", RootFormula::parse("10", &EmptyFunctionStore).unwrap());
+//!     variable_store.set("a", RootFormula::parse("1", &EmptyFunctionStore)?);
+//!     variable_store.set("b", RootFormula::parse("10", &EmptyFunctionStore)?);
 //!     let evaluated = formula.eval(&variable_store);
 //!     assert!(evaluated.is_ok());
-//!     let evaluated = evaluated.unwrap();
+//!     let evaluated = evaluated?;
 //!     assert_eq!(evaluated, 11.0);
 //! }
 //! ```

@@ -3,7 +3,7 @@ use crate::__lib::sync::Arc;
 use crate::formulas::Function;
 use crate::formulas::RootFormula;
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
-use crate::variable_stores::{GetVariable, SetVariable, Variable};
+use crate::variable_stores::{GetVariable, PopVariable, SetVariable, Variable};
 
 /// Struct for interacting with variable store and function store.
 #[derive(Debug, Default, Clone)]
@@ -68,5 +68,12 @@ impl<T, U: RegisterParser> RegisterParser for Context<T, U> {
     #[inline]
     fn register<W: Function + 'static>(&mut self) {
         self.function_store.register::<W>()
+    }
+}
+
+impl<T: PopVariable, U> PopVariable for Context<T, U> {
+    #[inline]
+    fn pop(&mut self, variable: &Variable) -> Option<Arc<RootFormula>> {
+        self.variable_store.pop(variable)
     }
 }

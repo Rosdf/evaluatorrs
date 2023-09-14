@@ -6,7 +6,7 @@ repository = "https://github.com/Rosdf/evaluatorrs"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["math", "expression", "evaluation"]
-categories = ["parsing-tools"]
+categories = ["mathematics", "no-std", "parsing"]
 edition = "2021"
 rust-version = "1.72"
 

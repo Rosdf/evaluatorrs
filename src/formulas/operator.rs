@@ -5,6 +5,8 @@ use crate::formulas::{Evaluate, EvaluationError, FunctionLike, IsConst, MathErro
 use crate::tokens::Operator;
 use crate::variable_stores::{GetVariable, Variable};
 
+// we store operator inside of struct instead of creating different structs, because this struct would be used with dynamic dispatch
+// and one v-table for all operators should provide better cache locality
 #[derive(Debug)]
 pub(crate) struct OperatorFormula {
     first: RootFormula,
@@ -28,12 +30,30 @@ impl IsConst for OperatorFormula {
     }
 }
 
+#[cfg(feature = "std")]
+#[inline]
+fn power_function(base: f64, power: f64) -> f64 {
+    base.powf(power)
+}
+
+#[cfg(all(not(feature = "std"), feature = "libm"))]
+#[inline]
+fn power_function(base: f64, power: f64) -> f64 {
+    libm::Libm::<f64>::pow(base, power)
+}
+
 impl Evaluate for OperatorFormula {
     fn eval(&self, args: &dyn GetVariable) -> Result<f64, EvaluationError> {
         let first = self.first.eval(args)?;
         let second = self.second.eval(args)?;
-
-        Ok(self.operator.eval(first, second))
+        match &self.operator {
+            Operator::Plus => Ok(first + second),
+            Operator::Minus => Ok(first - second),
+            Operator::Multiply => Ok(first * second),
+            Operator::Divide => Ok(first / second),
+            #[cfg(any(feature = "std", feature = "libm"))]
+            Operator::Exponent => Ok(power_function(first, second)),
+        }
     }
 }
 

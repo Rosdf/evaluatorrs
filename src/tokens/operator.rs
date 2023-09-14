@@ -1,16 +1,6 @@
 use crate::formulas::operator::OperatorFormula;
 use crate::formulas::RootFormula;
 
-#[cfg(all(not(feature = "std"), feature = "libm"))]
-fn exponential_function(base: f64, power: f64) -> f64 {
-    libm::Libm::<f64>::pow(base, power)
-}
-
-#[cfg(feature = "std")]
-fn exponential_function(base: f64, power: f64) -> f64 {
-    base.powf(power)
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum Operator {
     Plus,
@@ -75,17 +65,6 @@ impl Operator {
         second: RootFormula,
     ) -> OperatorFormula {
         OperatorFormula::new(first, second, self)
-    }
-
-    pub(crate) fn eval(&self, first: f64, second: f64) -> f64 {
-        match self {
-            Self::Plus => first + second,
-            Self::Minus => first - second,
-            Self::Multiply => first * second,
-            Self::Divide => first / second,
-            #[cfg(any(feature = "std", feature = "libm"))]
-            Self::Exponent => exponential_function(first, second),
-        }
     }
 }
 

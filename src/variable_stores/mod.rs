@@ -1,18 +1,21 @@
 mod empty_store;
+pub use crate::variable_stores::empty_store::EmptyVariableStore;
 #[cfg(feature = "std")]
 mod hashmap_store;
+mod vector_store;
+pub use vector_store::VectorVariableStore;
+
+#[cfg(feature = "std")]
+pub use crate::variable_stores::hashmap_store::HashMapVariableStore;
 
 use crate::__lib::fmt::{Display, Formatter};
 use crate::__lib::string::String;
 use crate::__lib::sync::Arc;
 use crate::formulas::RootFormula;
 use crate::formulas::{Evaluate, EvaluationError, IsConst, NoVariableError};
-pub use crate::variable_stores::empty_store::EmptyVariableStore;
-#[cfg(feature = "std")]
-pub use crate::variable_stores::hashmap_store::HashMapVariableStore;
 
 /// Type that stored in variable store as "key".
-#[derive(Debug, PartialEq, Hash, Eq, Clone)]
+#[derive(Debug, PartialEq, Hash, Eq, Clone, Ord, PartialOrd)]
 pub struct Variable(String);
 
 impl Display for Variable {
@@ -86,4 +89,10 @@ pub trait GetVariable {
 pub trait SetVariable {
     /// Sets variable by 'value'.
     fn set(&mut self, name: impl Into<Variable>, value: impl Into<RootFormula>);
+}
+
+/// Trait for removing variables from variable store.
+pub trait PopVariable {
+    /// Removes variable from variable store.
+    fn pop(&mut self, variable: &Variable) -> Option<Arc<RootFormula>>;
 }

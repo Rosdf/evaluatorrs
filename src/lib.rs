@@ -99,9 +99,9 @@ pub mod __lib {
     }
     pub mod ops {
         #[cfg(not(feature = "std"))]
-        pub use core::ops::Add;
+        pub use core::ops::{Add, Div, Mul, Sub};
         #[cfg(feature = "std")]
-        pub use std::ops::Add;
+        pub use std::ops::{Add, Div, Mul, Sub};
     }
     pub mod str {
         #[cfg(not(feature = "std"))]
@@ -125,9 +125,9 @@ pub mod __lib {
     }
     pub mod convert {
         #[cfg(not(feature = "std"))]
-        pub use core::convert::TryInto;
+        pub use core::convert::{identity, TryInto};
         #[cfg(feature = "std")]
-        pub use std::convert::TryInto;
+        pub use std::convert::{identity, TryInto};
     }
     pub mod iter {
         #[cfg(not(feature = "std"))]

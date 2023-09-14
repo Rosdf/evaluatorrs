@@ -142,3 +142,20 @@ macro_rules! impl_many_one_arg_functions {
         $(impl_many_one_arg_functions!($func_name, $struct_name);)*
     };
 }
+
+macro_rules! impl_operation_for_formula {
+    ($operation:ident, $method:ident, $operator:expr) => {
+        impl<T: Into<Self>> $operation<T> for $crate::formulas::RootFormula {
+            type Output = Self;
+
+            fn $method(self, rhs: T) -> Self::Output {
+                let formula =
+                    $crate::formulas::operator::OperatorFormula::new(self, rhs.into(), $operator);
+                formula.eval(&EmptyVariableStore).map_or_else(
+                    |_| Self::new(Box::new(formula) as Box<dyn FunctionLike>),
+                    Self::new,
+                )
+            }
+        }
+    };
+}

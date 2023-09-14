@@ -1,6 +1,6 @@
 use crate::__lib::boxed::Box;
 use crate::__lib::fmt::Debug;
-use crate::__lib::ops::Add;
+use crate::__lib::ops::{Add, Div, Mul, Sub};
 use crate::formulas::root_formula::formula_argument::FormulaArgument;
 use crate::formulas::root_formula::lexer::lex_expression;
 use crate::formulas::{Evaluate, EvaluationError, FunctionLike, IsConst, MathError, ParserError};
@@ -9,7 +9,6 @@ use crate::tokens::{BaseToken, Operator};
 use crate::variable_stores::{EmptyVariableStore, GetVariable, Variable};
 
 use crate::__lib::sync::Arc;
-use crate::formulas::operator::OperatorFormula;
 use crate::formulas::root_formula::parser::parse_tokens;
 
 mod formula_argument {
@@ -82,7 +81,7 @@ mod formula_argument {
 }
 
 /// Struct to store information about the formula.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RootFormula {
     tree: FormulaArgument,
 }
@@ -425,6 +424,7 @@ mod lexer {
 
     #[cfg(test)]
     mod test {
+        use crate::__lib::convert::identity;
         use crate::formulas::root_formula::lexer::{
             collect_arguments, lex_expression, lex_function, lex_number, lex_parenthesis,
             remove_spaces,
@@ -434,7 +434,7 @@ mod lexer {
 
         impl_one_arg_function!(
             "ident",
-            (|x: f64| x),
+            identity,
             /// Natural logarithm function.
             Ident
         );
@@ -972,16 +972,47 @@ impl<T: Into<FormulaArgument>> From<T> for RootFormula {
     }
 }
 
-impl<T: Into<Self>> Add<T> for RootFormula {
-    type Output = Self;
-
-    fn add(self, rhs: T) -> Self::Output {
-        Self::new(
-            Box::new(OperatorFormula::new(self, rhs.into(), Operator::Plus))
-                as Box<dyn FunctionLike>,
-        )
-    }
-}
+impl_operation_for_formula!(Add, add, Operator::Plus);
+impl_operation_for_formula!(Sub, sub, Operator::Minus);
+impl_operation_for_formula!(Mul, mul, Operator::Multiply);
+impl_operation_for_formula!(Div, div, Operator::Divide);
 
 #[cfg(test)]
-mod test_root_formula {}
+mod test_root_formula {
+    use crate::formulas::operator::OperatorFormula;
+    use crate::formulas::root_formula::formula_argument::FormulaArgument;
+    use crate::formulas::{FunctionLike, RootFormula};
+    use crate::tokens::Operator;
+    use crate::variable_stores::{SetVariable, Variable, VectorVariableStore};
+
+    #[test]
+    fn test_collapse() {
+        let mut formula = RootFormula::new(Box::new(OperatorFormula::new(
+            RootFormula::new(1.0),
+            RootFormula::new(2.0),
+            Operator::Plus,
+        )) as Box<dyn FunctionLike>);
+        assert!(formula.collapse_inner().is_ok());
+        assert!(
+            matches!(formula.tree, FormulaArgument::Number(num) if f64::abs(num - 3.0) <= f64::EPSILON)
+        );
+    }
+
+    #[test]
+    fn test_collapse_shared_to_owned() {
+        let mut formula = RootFormula::new(Variable::new("A"));
+        let mut variable_store = VectorVariableStore::new();
+        variable_store.set(
+            "A",
+            RootFormula::new(Box::new(OperatorFormula::new(
+                RootFormula::new(Variable::new("B")),
+                RootFormula::new(Variable::new("C")),
+                Operator::Plus,
+            )) as Box<dyn FunctionLike>),
+        );
+        formula.set_all_variables_shared(&variable_store);
+        drop(variable_store);
+        assert!(formula.collapse_inner().is_ok());
+        assert!(matches!(formula.tree, FormulaArgument::OwnedFunction(_)));
+    }
+}

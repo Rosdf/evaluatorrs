@@ -1,5 +1,5 @@
-mod array_store;
-pub use array_store::VecFunctionStore;
+mod vector_store;
+pub use vector_store::VectorFunctionStore;
 mod empty_store;
 pub use empty_store::EmptyFunctionStore;
 #[cfg(feature = "std")]

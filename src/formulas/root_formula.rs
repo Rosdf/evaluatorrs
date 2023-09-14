@@ -429,7 +429,7 @@ mod lexer {
             collect_arguments, lex_expression, lex_function, lex_number, lex_parenthesis,
             remove_spaces,
         };
-        use crate::function_stores::{EmptyFunctionStore, RegisterParser, VecFunctionStore};
+        use crate::function_stores::{EmptyFunctionStore, RegisterParser, VectorFunctionStore};
         use crate::tokens::{BaseToken, Bracket, NumberLike, Operator};
 
         impl_one_arg_function!(
@@ -539,7 +539,7 @@ mod lexer {
 
         #[test]
         fn test_function_lex() {
-            let mut store = VecFunctionStore::new();
+            let mut store = VectorFunctionStore::new();
             store.register::<Ident>();
             let mut expression = "ident(a)";
             let res = lex_function(&mut expression, &store);
@@ -844,6 +844,7 @@ mod parser {
             ));
         }
 
+        #[cfg(any(feature = "std", feature = "libm"))]
         #[test]
         fn power_test() {
             let mut initial: VecDeque<BaseToken> = VecDeque::with_capacity(7);
@@ -979,6 +980,7 @@ impl_operation_for_formula!(Div, div, Operator::Divide);
 
 #[cfg(test)]
 mod test_root_formula {
+    use crate::__lib::boxed::Box;
     use crate::formulas::operator::OperatorFormula;
     use crate::formulas::root_formula::formula_argument::FormulaArgument;
     use crate::formulas::{FunctionLike, RootFormula};

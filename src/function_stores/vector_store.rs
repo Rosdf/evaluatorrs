@@ -5,15 +5,18 @@ use crate::__lib::vec::Vec;
 use crate::formulas::{Function, FunctionLike, ParserError};
 use crate::function_stores::{ArgumentBounds, GetFunction, Parser, RegisterParser};
 
+#[cfg(all(doc, feature = "std"))]
+use crate::function_stores::HashMapFunctionStore;
+
 type InnerFunctionParser =
-    fn(&[&str], &VecFunctionStore) -> Result<Box<dyn FunctionLike>, ParserError>;
+    fn(&[&str], &VectorFunctionStore) -> Result<Box<dyn FunctionLike>, ParserError>;
 
 /// Function store based on [`Vec`]. Might be faster then [`HashMapFunctionStore`] for small number of functions.
 #[derive(Default, Clone, Debug)]
-pub struct VecFunctionStore(Vec<(&'static str, (InnerFunctionParser, ArgumentBounds))>);
+pub struct VectorFunctionStore(Vec<(&'static str, (InnerFunctionParser, ArgumentBounds))>);
 
-impl VecFunctionStore {
-    /// Creates an empty `VecFunctionStore`.
+impl VectorFunctionStore {
+    /// Creates an empty `VectorFunctionStore`.
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -32,7 +35,7 @@ impl<'a> Iterator for FunctionNamesIterator<'a> {
     }
 }
 
-impl<'a> GetFunction<'a> for VecFunctionStore {
+impl<'a> GetFunction<'a> for VectorFunctionStore {
     type Iter = FunctionNamesIterator<'a>;
 
     fn function_parser<'b>(
@@ -55,7 +58,7 @@ impl<'a> GetFunction<'a> for VecFunctionStore {
     }
 }
 
-impl RegisterParser for VecFunctionStore {
+impl RegisterParser for VectorFunctionStore {
     fn register<T: Function + 'static>(&mut self) {
         self.0.push((
             T::NAME,

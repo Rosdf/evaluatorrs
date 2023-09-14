@@ -29,6 +29,121 @@
 //!     debug_assert_eq!(result, 3.0);
 //! }
 //! ```
+//!
+//! ## Create your own functions
+//! Create function, that computes average of all it's arguments.
+//! ```rust
+//! use std::sync::Arc;
+//! use evaluatorrs::formulas::{IsConst, Evaluate, FunctionLike, Function, RootFormula, EvaluationError, MathError, ParserError};
+//! use evaluatorrs::function_stores::{GetFunction, RegisterParser, VectorFunctionStore};
+//! use evaluatorrs::variable_stores::{EmptyVariableStore, GetVariable, Variable};
+//!
+//! #[derive(Debug)]
+//! struct Average {
+//!     arguments: Box<[RootFormula]>,
+//! }
+//!
+//! impl IsConst for Average {
+//!     fn is_const(&self) -> bool {
+//!        self.arguments.iter().all(|x| x.is_const())
+//!     }
+//! }
+//!
+//! impl Evaluate for Average {
+//!     fn eval(&self, args: &dyn GetVariable) -> Result<f64, EvaluationError> {
+//!         let mut res = 0.0;
+//!         for val in self.arguments.iter() {
+//!             let new_val = val.eval(args)?;
+//!             if new_val.is_nan() {
+//!                 return Ok(f64::NAN);
+//!             }
+//!             res += new_val;
+//!         }
+//!         Ok(res / self.arguments.len() as f64)
+//!     }
+//! }
+//!
+//! impl FunctionLike for Average {
+//!     fn collapse_inner(&mut self) -> Result<(), MathError> {
+//!         for val in self.arguments.iter_mut() {
+//!             val.collapse_inner()?;
+//!         }
+//!         Ok(())
+//!     }
+//!
+//!     fn set_all_variables_shared(&mut self, args: &dyn GetVariable) {
+//!         for val in self.arguments.iter_mut() {
+//!             val.set_all_variables_shared(args);
+//!         }
+//!     }
+//!
+//!     fn set_all_variables_owned(&mut self, args: &dyn GetVariable) {
+//!         for val in self.arguments.iter_mut() {
+//!             val.set_all_variables_owned(args);
+//!         }
+//!     }
+//!
+//!     fn set_variable_shared(&mut self, name: &Variable, function: &Arc<RootFormula>) {
+//!         for val in self.arguments.iter_mut() {
+//!             val.set_variable_shared(name, function);
+//!         }
+//!     }
+//!
+//!     fn set_variable_owned(&mut self, name: &Variable, function: &RootFormula) {
+//!         for val in self.arguments.iter_mut() {
+//!             val.set_variable_owned(name, function);
+//!         }
+//!     }
+//!
+//!     fn clone_into_box(&self) -> Box<dyn FunctionLike> {
+//!         Box::new(Self {arguments: self.arguments.iter().map(|x| RootFormula::new(x.clone_into_box())).collect()})
+//!     }
+//! }
+//!
+//! impl Function for Average {
+//!     const MIN_NUMBER_OF_ARGUMENTS: usize = 1;
+//!     const MAX_NUMBER_OF_ARGUMENTS: usize = 999;
+//!     const NAME: &'static str = "avg";
+//!
+//!     fn parse<T: for<'a> GetFunction<'a>>(arguments: &[&str], formulas: &T) -> Result<Self, ParserError>
+//!     where
+//!         Self: Sized
+//!     {
+//!         let parsed_arguments: Result<Box<[_]>, _> = arguments.iter().map(|x| RootFormula::parse(*x, formulas)).collect();
+//!         parsed_arguments.map(|x| Self {arguments: x})
+//!     }
+//! }
+//!
+//! fn try_parse() {
+//!     let mut function_store = VectorFunctionStore::new();
+//!     function_store.register::<Average>();
+//!     let parsed = RootFormula::parse("avg(1, 2, 3)", &function_store);
+//!     assert!(parsed.is_ok());
+//!     let parsed = parsed.unwrap();
+//!     let res = parsed.eval(&EmptyVariableStore);
+//!     assert!(res.is_ok());
+//!     assert_eq!(res.unwrap(), 2.0);
+//! }
+//! ```
+//!
+//! ## Evaluate functions with variables
+//! ```rust
+//! # use evaluatorrs::formulas::{Evaluate, RootFormula};
+//! # use evaluatorrs::function_stores::EmptyFunctionStore;
+//! # #[cfg(feature = "std")]
+//! fn example() {
+//!     # use evaluatorrs::variable_stores::{HashMapVariableStore, SetVariable};
+//!
+//!     let formula = RootFormula::parse("a + b", &EmptyFunctionStore).unwrap();
+//!     let mut variable_store = HashMapVariableStore::new();
+//!     variable_store.set("a", RootFormula::parse("1", &EmptyFunctionStore).unwrap());
+//!     variable_store.set("b", RootFormula::parse("10", &EmptyFunctionStore).unwrap());
+//!     let evaluated = formula.eval(&variable_store);
+//!     assert!(evaluated.is_ok());
+//!     let evaluated = evaluated.unwrap();
+//!     assert_eq!(evaluated, 11.0);
+//! }
+//! ```
 
 mod context;
 

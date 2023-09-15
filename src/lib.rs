@@ -35,7 +35,7 @@
 //! ## Create your own functions
 //! Create function, that computes average of all it's arguments.
 //! ```rust
-//! use std::sync::Arc;
+//! # use evaluatorrs::__lib::sync::Arc;
 //! use evaluatorrs::formulas::{IsConst, Evaluate, FunctionLike, Function, RootFormula, EvaluationError, MathError, ParserError};
 //! use evaluatorrs::function_stores::{GetFunction, RegisterParser, VectorFunctionStore};
 //! use evaluatorrs::variable_stores::{EmptyVariableStore, GetVariable, Variable};
@@ -131,7 +131,7 @@
 //!
 //! ## Evaluate functions with variables
 //! ```rust
-//! # use evaluatorrs::formulas::{Evaluate, RootFormula};
+//! # use evaluatorrs::formulas::{Evaluate, RootFormula, ParserError};
 //! # use evaluatorrs::function_stores::EmptyFunctionStore;
 //! # #[cfg(feature = "std")]
 //! fn example() -> Result<(), ParserError> {
@@ -145,6 +145,7 @@
 //!     assert!(evaluated.is_ok());
 //!     let evaluated = evaluated?;
 //!     assert_eq!(evaluated, 11.0);
+//!     Ok(())
 //! }
 //! ```
 

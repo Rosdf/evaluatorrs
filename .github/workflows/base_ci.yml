@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "ci-test" ]
   pull_request:
     branches: [ "main" ]
 
@@ -32,11 +32,13 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         with:
-          command: build
+          command: install
+          args: cargo-hack
 
       - uses: actions-rs/cargo@v1
         with:
-          command: test
+          command: hack
+          args: test --feature-powerset
 
       - uses: actions-rs/cargo@v1
         with:
@@ -45,5 +47,5 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         with:
-          command: clippy
-          args: -- -D warnings
+          command: hack
+          args: clippy --feature-powerset -- -D warnings

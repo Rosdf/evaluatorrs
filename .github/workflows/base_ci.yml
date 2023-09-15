@@ -37,8 +37,8 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         with:
-          command: hack test
-          args: --feature-powerset
+          command: hack
+          args: test --feature-powerset
 
       - uses: actions-rs/cargo@v1
         with:

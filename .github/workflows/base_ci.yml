@@ -32,7 +32,8 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         with:
-          command: install cargo-hack
+          command: install
+          args: cargo-hack
 
       - uses: actions-rs/cargo@v1
         with:

@@ -23,9 +23,16 @@ pub use root_formula::RootFormula;
 #[derive(Debug)]
 pub struct UnknownTokenError(String);
 
+impl UnknownTokenError {
+    /// Creates new `UnknownTokenError`.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+}
+
 impl Display for UnknownTokenError {
     fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
-        write!(f, "Got unknown token {}", self.0)
+        write!(f, "got unknown token {}", self.0)
     }
 }
 
@@ -38,7 +45,7 @@ pub struct ParenthesisError;
 
 impl Display for ParenthesisError {
     fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
-        write!(f, "Wrong number of parenthesis")
+        write!(f, "wrong number of parenthesis")
     }
 }
 
@@ -65,7 +72,7 @@ pub struct MathError(String);
 
 impl Display for MathError {
     fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
-        write!(f, "Failed to evaluate {}", self.0)
+        write!(f, "failed to evaluate {}", self.0)
     }
 }
 
@@ -87,7 +94,7 @@ impl NoVariableError {
 
 impl Display for NoVariableError {
     fn fmt(&self, f: &mut Formatter<'_>) -> crate::__lib::fmt::Result {
-        write!(f, "No variable with name {} in variable store", self.name)
+        write!(f, "no variable with name {} in variable store", self.name)
     }
 }
 
@@ -116,6 +123,36 @@ impl Display for EvaluationError {
 #[cfg(any(feature = "std", nightly))]
 impl Error for EvaluationError {}
 
+/// The error type which is returned when got wrong type in parser.
+#[derive(Debug)]
+pub struct WrongTypeError {
+    got_token: String,
+    expected_token: &'static str,
+}
+
+impl WrongTypeError {
+    /// Creates new `WrongTypeError`.
+    pub const fn new(got_token: String, expected_token: &'static str) -> Self {
+        Self {
+            got_token,
+            expected_token,
+        }
+    }
+}
+
+impl Display for WrongTypeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "got token \"{}\", expected \"{}\"",
+            self.got_token, self.expected_token
+        )
+    }
+}
+
+#[cfg(any(feature = "std", nightly))]
+impl Error for WrongTypeError {}
+
 /// The error variants which are returned when failed to parse formula for any reason.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -128,6 +165,8 @@ pub enum ParserError {
     ArgumentsError(ArgumentsError),
     /// Failed to evaluate constant function.
     EvaluationError(EvaluationError),
+    /// Got wrong type of token, while parsing.
+    WrongTypeError(WrongTypeError),
 }
 
 impl Display for ParserError {
@@ -137,6 +176,7 @@ impl Display for ParserError {
             Self::ParenthesisError(e) => Display::fmt(e, f),
             Self::ArgumentsError(e) => Display::fmt(e, f),
             Self::EvaluationError(e) => Display::fmt(e, f),
+            Self::WrongTypeError(e) => Display::fmt(e, f),
         }
     }
 }
@@ -174,6 +214,12 @@ impl From<MathError> for ParserError {
     }
 }
 
+impl From<WrongTypeError> for ParserError {
+    fn from(value: WrongTypeError) -> Self {
+        Self::WrongTypeError(value)
+    }
+}
+
 /// Trait for evaluating structs.
 pub trait Evaluate {
     /// Evaluates value of formula, args contains variables.
@@ -197,7 +243,7 @@ pub trait FunctionLike: Evaluate + IsConst + Debug + Send + Sync {
     ///
     /// # Errors
     ///
-    /// will return Err if got error on evaluation of inner formula
+    /// Will return Err if got error on evaluation of inner formula
     fn collapse_inner(&mut self) -> Result<(), MathError>;
     /// Sets variables present in function to formulas stored in `args` as shared function.
     /// If function has some inner state and set as shared in different formulas, inner state will be shared.
@@ -273,7 +319,7 @@ pub trait Function: FunctionLike {
     ///
     /// # Errors
     ///
-    /// will return Err if expression is not a valid formula.
+    /// Will return Err if expression is not a valid formula.
     fn parse<T: for<'a> GetFunction<'a>>(
         arguments: &[&str],
         formulas: &T,
@@ -285,7 +331,7 @@ pub trait Function: FunctionLike {
     ///
     /// # Errors
     ///
-    /// will return Err if expression is not a valid formula
+    /// Will return Err if expression is not a valid formula
     #[inline]
     fn parse_into_box<T: for<'a> GetFunction<'a>>(
         arguments: &[&str],

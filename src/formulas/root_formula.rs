@@ -290,16 +290,9 @@ mod lexer {
         res
     }
 
+    #[inline]
     fn remove_spaces(expression: &mut &str) {
-        let mut spaces: usize = 0;
-        for elem in expression.chars() {
-            if elem == ' ' {
-                spaces += 1;
-            } else {
-                break;
-            }
-        }
-        *expression = &expression[spaces..];
+        *expression = expression.trim_start();
     }
 
     fn lex_variable(expression: &mut &str) -> Option<Variable> {
@@ -955,7 +948,7 @@ impl RootFormula {
     ///
     /// # Errors
     ///
-    /// will return Err if non valid expression is passed.
+    /// Will return Err if non valid expression is passed.
     pub fn parse<T: for<'a> GetFunction<'a>>(
         expression: &str,
         formulas: &T,

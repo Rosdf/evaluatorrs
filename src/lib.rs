@@ -158,6 +158,8 @@ pub mod function_stores;
 pub mod formulas;
 mod tokens;
 
+/// Provides unified ways to parse [`&str`] to parts of [`RootFormula`]
+pub mod parsers;
 /// Provides basic ways to store variables and traits to implement new once.
 pub mod variable_stores;
 
@@ -259,5 +261,11 @@ pub mod __lib {
         pub use core::slice::Iter;
         #[cfg(feature = "std")]
         pub use std::slice::Iter;
+    }
+    pub mod marker {
+        #[cfg(not(feature = "std"))]
+        pub use core::marker::PhantomData;
+        #[cfg(feature = "std")]
+        pub use std::marker::PhantomData;
     }
 }

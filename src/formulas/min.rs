@@ -1,6 +1,5 @@
 use crate::__lib::boxed::Box;
 use crate::__lib::sync::Arc;
-use crate::__lib::vec::Vec;
 use crate::formulas::root_formula::RootFormula;
 use crate::formulas::{
     Evaluate, EvaluationError, Function, FunctionLike, IsConst, MathError, ParserError,
@@ -81,12 +80,12 @@ impl Function for Min {
     where
         Self: Sized,
     {
-        let mut parsed_arguments = Vec::with_capacity(arguments.len());
-        for argument in arguments {
-            parsed_arguments.push(RootFormula::parse(argument, formulas)?);
-        }
+        let parsed_arguments = arguments
+            .iter()
+            .map(|x| RootFormula::parse(x, formulas))
+            .collect::<Result<Box<[RootFormula]>, ParserError>>()?;
         Ok(Self {
-            arguments: parsed_arguments.into_boxed_slice(),
+            arguments: parsed_arguments,
         })
     }
 }
